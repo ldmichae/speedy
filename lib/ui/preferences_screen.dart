@@ -5,6 +5,7 @@ import '../core/ride_export.dart';
 import '../core/rider_profile.dart';
 import '../core/units.dart';
 import 'app_palette.dart';
+import 'credits.dart';
 import 'layout.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
@@ -85,6 +86,12 @@ class PreferencesScreen extends ConsumerWidget {
       child: _RiderProfileForm(),
     );
 
+    const creditsSection = _Section(
+      title: 'Credits',
+      description: 'Map, route and elevation data come from these projects. '
+          'Tap one to read its terms.',
+      child: CreditsList(),
+    );
     const training = _Section(
       title: 'Training',
       description: 'Your FTP, in watts. Workout plans can set steps as a '
@@ -115,12 +122,12 @@ class PreferencesScreen extends ConsumerWidget {
                   if (wide)
                     // Short settings on the left, the longer profile form on the right.
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: stack([appearance, recording, training])),
+                      Expanded(child: stack([appearance, recording, training, creditsSection])),
                       const SizedBox(width: 24),
                       Expanded(child: stack([units, profile])),
                     ])
                   else
-                    stack([appearance, recording, training, units, profile]),
+                    stack([appearance, recording, training, units, profile, creditsSection]),
                 ],
               ),
             ),

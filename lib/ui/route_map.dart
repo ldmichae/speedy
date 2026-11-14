@@ -44,8 +44,12 @@ List<Widget> mapBaseLayers(WidgetRef ref, {int panBuffer = 1}) => [
         maxNativeZoom: 19,
         panBuffer: panBuffer,
       ),
+      // OSM's policy: the credit must be visible on the map, not behind a
+      // toggle. The other credits can live in the expandable box.
+      const _OsmCredit(),
       const RichAttributionWidget(
         alignment: AttributionAlignment.bottomLeft,
+        showFlutterMapAttribution: false,
         attributions: [
           TextSourceAttribution('© OpenStreetMap contributors'),
           TextSourceAttribution('Routing: FOSSGIS OSRM'),
@@ -77,3 +81,35 @@ Polyline routeLine(List<LatLng> path, {double width = 5}) => Polyline(
       borderStrokeWidth: 1.5,
       borderColor: Colors.white,
     );
+
+/// "© OpenStreetMap contributors", always visible at the bottom right of the
+/// map (OSM's policy forbids hiding it behind a toggle). Shrinks and clips
+/// rather than overflowing on a narrow tile.
+class _OsmCredit extends StatelessWidget {
+  const _OsmCredit();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomRight,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: Text(
+              '© OpenStreetMap contributors',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: Colors.black87),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
