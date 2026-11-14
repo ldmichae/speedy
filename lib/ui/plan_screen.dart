@@ -6,6 +6,7 @@ import '../core/plan.dart';
 import '../core/ride_recording.dart';
 import '../devices/trainer.dart';
 import 'format.dart';
+import 'layout.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'trainer_controller.dart';
@@ -51,6 +52,13 @@ class PlansScreen extends ConsumerWidget {
           : ListView(children: [
               for (final p in plans)
                 ListTile(
+                  leading: SizedBox(
+                    width: 96,
+                    child: PlanPreview(
+                        steps: p.expand(),
+                        unit: p.percent ? '% FTP' : 'W',
+                        height: 48),
+                  ),
                   title: Text(p.name),
                   subtitle: Text('${p.expand().length} steps · '
                       '${clock(Duration(seconds: p.totalSeconds))}'
@@ -104,7 +112,7 @@ class _BlockRows {
 }
 
 /// Edits a plan as blocks of steps (minutes, start, optional ramp-to), each
-/// block repeatable. Pops the finished [Plan].
+/// block repeatable, with a live chart. Pops the finished [Plan].
 class PlanEditor extends StatefulWidget {
   const PlanEditor({super.key, this.initial});
   final Plan? initial;
@@ -124,6 +132,25 @@ class _PlanEditorState extends State<PlanEditor> {
       _BlockRows(b),
   ];
   String? _error;
+
+  /// Whatever parses so far, for the live chart; [_save] does the strict check.
+  List<PlanStep> _preview() {
+    final out = <PlanStep>[];
+    for (final b in _blocks) {
+      final n = (int.tryParse(b.repeat.text) ?? 1).clamp(1, 99);
+      final steps = <PlanStep>[];
+      for (final r in b.steps) {
+        final m = double.tryParse(r.min.text), a = int.tryParse(r.from.text);
+        if (m == null || m <= 0 || a == null) continue;
+        steps.add(PlanStep((m * 60).round().clamp(1, 1 << 30), a,
+            int.tryParse(r.to.text) ?? a));
+      }
+      for (var i = 0; i < n; i++) {
+        out.addAll(steps);
+      }
+    }
+    return out;
+  }
 
   void _save() {
     final max = _percent ? 300 : 1500;
@@ -150,16 +177,15 @@ class _PlanEditorState extends State<PlanEditor> {
   }
 
   Widget _field(TextEditingController c, String label, {bool decimal = false}) =>
-      Expanded(
-        child: TextField(
-          controller: c,
-          decoration: InputDecoration(labelText: label),
-          keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(
-                RegExp(decimal ? r'[0-9.]' : r'[0-9]')),
-          ],
-        ),
+      TextField(
+        controller: c,
+        decoration: InputDecoration(labelText: label),
+        onChanged: (_) => setState(() {}),
+        keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(
+              RegExp(decimal ? r'[0-9.]' : r'[0-9]')),
+        ],
       );
 
   Widget _block(int bi, _BlockRows b) {
@@ -182,11 +208,11 @@ class _PlanEditorState extends State<PlanEditor> {
           ]),
           for (final (i, r) in b.steps.indexed)
             Row(children: [
-              _field(r.min, 'Minutes', decimal: true),
+              Expanded(child: _field(r.min, 'Minutes', decimal: true)),
               const SizedBox(width: 12),
-              _field(r.from, unit),
+              Expanded(child: _field(r.from, unit)),
               const SizedBox(width: 12),
-              _field(r.to, 'Ramp to (optional)'),
+              Expanded(child: _field(r.to, 'Ramp to (optional)')),
               IconButton(
                 tooltip: 'Remove step',
                 icon: const Icon(Icons.close),
@@ -196,9 +222,9 @@ class _PlanEditorState extends State<PlanEditor> {
               ),
             ]),
           TextButton.icon(
-            onPressed: () => setState(() => b.steps.add(_StepRow(
-                PlanStep((double.tryParse(b.steps.last.min.text) ?? 5) * 60 ~/ 1,
-                    int.tryParse(b.steps.last.from.text) ?? 100)))),
+            onPressed: () => setState(() => b.steps.add(_StepRow(PlanStep(
+                ((double.tryParse(b.steps.last.min.text) ?? 5) * 60).round(),
+                int.tryParse(b.steps.last.from.text) ?? 100)))),
             icon: const Icon(Icons.add),
             label: const Text('Add step'),
           ),
@@ -209,40 +235,78 @@ class _PlanEditorState extends State<PlanEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final nameAndUnit =
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      TextField(
+        controller: _name,
+        decoration: const InputDecoration(labelText: 'Name'),
+      ),
+      const SizedBox(height: 12),
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(value: false, label: Text('Watts')),
+          ButtonSegment(value: true, label: Text('% of FTP')),
+        ],
+        selected: {_percent},
+        onSelectionChanged: (s) => setState(() => _percent = s.first),
+      ),
+    ]);
+    final blocks = <Widget>[
+      for (final (i, b) in _blocks.indexed) _block(i, b),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () => setState(() =>
+              _blocks.add(_BlockRows(const PlanBlock([PlanStep(300, 100)])))),
+          icon: const Icon(Icons.add),
+          label: const Text('Add block'),
+        ),
+      ),
+      if (_error != null)
+        Text(_error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error)),
+    ];
+    Widget preview(double height) => PlanPreview(
+        steps: _preview(), unit: _percent ? '% FTP' : 'W', height: height);
+
+    // The chart never scrolls away: beside the blocks on a wide window,
+    // pinned above them on a narrow one.
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.initial == null ? 'New plan' : 'Edit plan'),
         actions: [TextButton(onPressed: _save, child: const Text('Save'))],
       ),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        TextField(
-          controller: _name,
-          decoration: const InputDecoration(labelText: 'Name'),
-        ),
-        const SizedBox(height: 12),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Watts')),
-            ButtonSegment(value: true, label: Text('% of FTP')),
-          ],
-          selected: {_percent},
-          onSelectionChanged: (s) => setState(() => _percent = s.first),
-        ),
-        const SizedBox(height: 12),
-        for (final (i, b) in _blocks.indexed) _block(i, b),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () => setState(() =>
-                _blocks.add(_BlockRows(const PlanBlock([PlanStep(300, 100)])))),
-            icon: const Icon(Icons.add),
-            label: const Text('Add block'),
+      body: LayoutBuilder(builder: (context, box) {
+        if (isWideLayout(box.maxWidth)) {
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: ListView(padding: const EdgeInsets.all(16), children: [
+                nameAndUnit,
+                const SizedBox(height: 12),
+                ...blocks,
+              ]),
+            ),
+            SizedBox(
+              width: 520,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: preview(260),
+              ),
+            ),
+          ]);
+        }
+        return Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [nameAndUnit, const SizedBox(height: 12), preview(110)]),
           ),
-        ),
-        if (_error != null)
-          Text(_error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
-      ]),
+          Expanded(
+            child: ListView(padding: const EdgeInsets.all(16), children: blocks),
+          ),
+        ]);
+      }),
     );
   }
 }
@@ -298,4 +362,82 @@ class PlanBar extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The shape of a plan: target over time, in the plan's own unit.
+class PlanPreview extends StatelessWidget {
+  const PlanPreview(
+      {super.key, required this.steps, required this.unit, this.height = 120});
+
+  final List<PlanStep> steps;
+  final String unit;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label: 'Plan chart, ${clock(Duration(seconds: steps.totalSeconds))}',
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: CustomPaint(
+            painter: _PreviewPainter(
+                steps, unit, scheme.primary, scheme.onSurfaceVariant)),
+      ),
+    );
+  }
+}
+
+class _PreviewPainter extends CustomPainter {
+  _PreviewPainter(this.steps, this.unit, this.color, this.textColor);
+  final List<PlanStep> steps;
+  final String unit;
+  final Color color, textColor;
+
+  void _text(Canvas c, String s, Offset at,
+      {bool right = false, bool bottom = false}) {
+    final tp = TextPainter(
+      text: TextSpan(text: s, style: TextStyle(color: textColor, fontSize: 11)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(c, Offset(at.dx - (right ? tp.width : 0), at.dy - (bottom ? tp.height : 0)));
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (steps.isEmpty) return;
+    final small = size.height < 80; // thumbnail: shape only
+    final top = small ? 4.0 : 14.0, bottom = small ? 4.0 : 16.0;
+    final total = steps.totalSeconds;
+    final peak = steps.fold(0, (m, s) => [m, s.from, s.to].reduce((a, b) => a > b ? a : b));
+    final yMax = (peak == 0 ? 1 : peak) * 1.1;
+    final pts = steps.outline(0);
+    Offset p((double, double) q) => Offset(size.width * q.$1 / total,
+        size.height - bottom - (size.height - top - bottom) * q.$2 / yMax);
+    final line = Path()..moveTo(p(pts.first).dx, p(pts.first).dy);
+    for (final q in pts.skip(1)) {
+      line.lineTo(p(q).dx, p(q).dy);
+    }
+    final fill = Path.from(line)
+      ..lineTo(size.width, size.height - bottom)
+      ..lineTo(0, size.height - bottom)
+      ..close();
+    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.25));
+    canvas.drawPath(
+        line,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeJoin = StrokeJoin.round);
+    if (small) return;
+    _text(canvas, 'peak $peak $unit', Offset.zero);
+    _text(canvas, '0:00', Offset(0, size.height), bottom: true);
+    _text(canvas, clock(Duration(seconds: total)), Offset(size.width, size.height),
+        right: true, bottom: true);
+  }
+
+  @override
+  bool shouldRepaint(_PreviewPainter old) => true;
 }

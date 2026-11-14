@@ -8,6 +8,7 @@ import '../core/ride_recording.dart';
 import 'dashboard_grid.dart';
 import 'dashboard_layout_controller.dart';
 import 'layout.dart';
+import 'plan_controller.dart';
 import 'plan_screen.dart';
 import 'recorder_controller.dart';
 import 'recording_panel.dart';
@@ -46,6 +47,13 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
   VoidCallback _guarded(VoidCallback f) => () {
         if (ModalRoute.of(context)?.isCurrent ?? true) f();
       };
+
+  /// A plan owns the target while it runs.
+  void _nudge(int watts) {
+    if (ref.read(planRunProvider) == null) {
+      ref.read(trainerControllerProvider.notifier).adjustTarget(watts);
+    }
+  }
 
   void _toggleRecording() {
     final recorder = ref.read(recorderProvider.notifier);
@@ -86,7 +94,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
   Widget build(BuildContext context) {
     final deviceName = ref.watch(trainerControllerProvider.select((s) => s.deviceName));
     final error = ref.watch(trainerControllerProvider.select((s) => s.error));
-    final trainer = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
     final active = ref.watch(
         recorderProvider.select((r) => r.status != RecStatus.idle));
@@ -164,13 +171,13 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             : {
                 const SingleActivator(LogicalKeyboardKey.space): _guarded(_toggleRecording),
                 const SingleActivator(LogicalKeyboardKey.arrowUp): _guarded(() =>
-                    trainer.adjustTarget(5)),
+                    _nudge(5)),
                 const SingleActivator(LogicalKeyboardKey.arrowDown): _guarded(() =>
-                    trainer.adjustTarget(-5)),
+                    _nudge(-5)),
                 const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): _guarded(() =>
-                    trainer.adjustTarget(25)),
+                    _nudge(25)),
                 const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): _guarded(() =>
-                    trainer.adjustTarget(-25)),
+                    _nudge(-25)),
               },
         child: Focus(
           focusNode: _focus,

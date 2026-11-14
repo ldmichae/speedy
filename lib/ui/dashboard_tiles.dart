@@ -260,6 +260,7 @@ class _ErgTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
+    final following = ref.watch(planRunProvider.select((r) => r != null));
     final c = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
 
@@ -274,7 +275,8 @@ class _ErgTile extends ConsumerWidget {
               Tooltip(
                 message: 'ERG mode: the trainer holds this power whatever your '
                     'cadence.\nArrow up/down: ±5 W. Shift + arrow: ±25 W.',
-                child: Text('ERG target', style: theme.textTheme.bodyMedium),
+                child: Text(following ? 'ERG target · set by plan' : 'ERG target',
+                    style: theme.textTheme.bodyMedium),
               ),
               const Spacer(),
               Text('$target W',
@@ -294,7 +296,9 @@ class _ErgTile extends ConsumerWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: Tooltip(
-                          message: step > 0
+                          message: following
+                              ? 'The plan sets the target. Stop the plan to adjust it.'
+                              : step > 0
                               ? 'Raise target by $step W'
                               : 'Lower target by ${-step} W',
                           child: FilledButton.tonal(
@@ -302,7 +306,7 @@ class _ErgTile extends ConsumerWidget {
                               minimumSize: const Size(0, 56),
                               padding: EdgeInsets.zero,
                             ),
-                            onPressed: () => c.adjustTarget(step),
+                            onPressed: following ? null : () => c.adjustTarget(step),
                             child: Text(
                               step > 0 ? '+$step' : '−${-step}',
                               style: const TextStyle(
