@@ -61,15 +61,73 @@ class ToursScreen extends ConsumerWidget {
     }
   }
 
+  /// Picks a GPX, asks for a name and stage length, and splits it into stages.
+  Future<void> _fromGpx(BuildContext context, WidgetRef ref) async {
+    final route = await pickGpxRoute(context);
+    if (route == null || !context.mounted) return;
+    final units = ref.read(rideUnitsProvider);
+    final name = TextEditingController(text: route.name);
+    final len = TextEditingController(
+        text: distanceIn(50, units).round().toString());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tour from GPX'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(routeDistanceText(route.lengthMeters, units)),
+          TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'Name')),
+          TextField(
+            controller: len,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+                labelText: 'Longest stage (${distanceUnit(units)})'),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Create')),
+        ],
+      ),
+    );
+    final km = (double.tryParse(len.text) ?? 0) *
+        (units == UnitSystem.imperial ? kmPerMile : 1);
+    if (ok != true || km <= 0) return;
+    final tour = Tour(
+        DateTime.now().millisecondsSinceEpoch.toString(),
+        name.text.trim().isEmpty ? route.name : name.text.trim(),
+        route.splitInto(km * 1000));
+    await ref.read(toursProvider.notifier).upsert(tour);
+    if (context.mounted) {
+      await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => TourScreen(tourId: tour.id)));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tours = ref.watch(toursProvider);
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _create(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('New tour'),
-      ),
+      floatingActionButton: Column(mainAxisSize: MainAxisSize.min, children: [
+        FloatingActionButton.small(
+          heroTag: 'tour-from-gpx',
+          tooltip: 'New tour from GPX',
+          onPressed: () => _fromGpx(context, ref),
+          child: const Icon(Icons.upload_file),
+        ),
+        const SizedBox(height: 12),
+        FloatingActionButton.extended(
+          heroTag: 'new-tour',
+          onPressed: () => _create(context, ref),
+          icon: const Icon(Icons.add),
+          label: const Text('New tour'),
+        ),
+      ]),
       body: tours.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not load tours: $e')),

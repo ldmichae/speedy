@@ -145,6 +145,36 @@ class SavedRoute implements RideCourse {
         a.longitude + (b.longitude - a.longitude) * f);
   }
 
+  /// The stretch between [from] and [to] metres as its own route, carrying
+  /// its share of the elevation.
+  SavedRoute slice(double from, double to, String name) {
+    final pts = [
+      positionAt(from),
+      for (var i = 0; i < path.length; i++)
+        if (cumulative[i] > from && cumulative[i] < to) path[i],
+      positionAt(to),
+    ];
+    final r = SavedRoute(name, [pts.first, pts.last], pts);
+    final e = elevation;
+    if (e == null) return r;
+    final len = to - from;
+    final n = (len / 50).ceil().clamp(1, 1 << 20) + 1;
+    return r.withElevation(ElevationProfile.fromSamples([
+      for (var i = 0; i < n; i++) len * i / (n - 1)
+    ], [
+      for (var i = 0; i < n; i++) e.elevationAt(from + len * i / (n - 1))
+    ]));
+  }
+
+  /// Splits into the fewest equal stages no longer than [stageMeters].
+  List<SavedRoute> splitInto(double stageMeters) {
+    final n = (lengthMeters / stageMeters).ceil().clamp(1, 1 << 20);
+    final len = lengthMeters / n;
+    return [
+      for (var i = 0; i < n; i++) slice(len * i, len * (i + 1), 'Stage ${i + 1}')
+    ];
+  }
+
   Map<String, Object?> toJson() => {
         'name': name,
         'wp': [
