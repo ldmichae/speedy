@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'units.dart';
+
 /// Height along a route: [elevations] (metres) at [distances] (metres from
 /// the start, increasing).
 class ElevationProfile {
@@ -105,8 +107,8 @@ class ElevationProfile {
 }
 
 /// "↑ 180 m  ↓ 175 m  max 6.2%" for a profile.
-String elevationSummary(ElevationProfile p) {
+String elevationSummary(ElevationProfile p, UnitSystem u) {
   final (up, _) = p.gradeRange;
-  return '↑ ${p.climb.round()} m   ↓ ${p.descent.round()} m   '
+  return '↑ ${elevationText(p.climb, u)}   ↓ ${elevationText(p.descent, u)}   '
       'steepest ${up.toStringAsFixed(1)}%';
 }

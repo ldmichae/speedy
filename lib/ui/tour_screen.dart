@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/route.dart';
+import '../core/units.dart';
 import '../core/tour.dart';
 import '../devices/trainer.dart';
 import 'elevation_chart.dart';
@@ -12,6 +13,7 @@ import 'route_screen.dart';
 import 'tour_controller.dart';
 import 'navigation.dart';
 import 'trainer_controller.dart';
+import 'units_controller.dart';
 
 class ToursScreen extends ConsumerWidget {
   const ToursScreen({super.key});
@@ -84,7 +86,7 @@ class ToursScreen extends ConsumerWidget {
                     leading: const Icon(Icons.hiking),
                     title: Text(t.name),
                     subtitle: Text('${t.stageCount} stages · '
-                        '${routeDistanceText(t.lengthMeters)} · '
+                        '${routeDistanceText(t.lengthMeters, ref.watch(rideUnitsProvider))} · '
                         '${t.completed.length} done'),
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -184,9 +186,9 @@ class TourScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Text(
-            '${routeDistanceText(tour.lengthMeters)} · ${tour.stageCount} stages · '
+            '${routeDistanceText(tour.lengthMeters, ref.watch(rideUnitsProvider))} · ${tour.stageCount} stages · '
             '${loaded.length}/${tour.stageCount} with elevation'
-            '${loaded.isEmpty ? '' : ' · ↑ ${climb.round()} m so far'}',
+            '${loaded.isEmpty ? '' : ' · ↑ ${elevationText(climb, ref.watch(rideUnitsProvider))} so far'}',
             style: Theme.of(context).textTheme.titleSmall,
           ),
         ),
@@ -217,6 +219,7 @@ class TourScreen extends ConsumerWidget {
             stage: s,
             load: loads[stageKey(tour.id, i)],
             connected: connected,
+            units: ref.watch(rideUnitsProvider),
             onLoad: () => loader.load(tour.id, i),
             onRide: (sim) => _ride(context, ref, tour, i, sim),
             onDelete: tour.stageCount == 1
@@ -230,13 +233,14 @@ class TourScreen extends ConsumerWidget {
   }
 }
 
-class _StageTile extends StatelessWidget {
+class _StageTile extends ConsumerWidget {
   const _StageTile({
     required this.tour,
     required this.index,
     required this.stage,
     required this.load,
     required this.connected,
+    required this.units,
     required this.onLoad,
     required this.onRide,
     required this.onDelete,
@@ -247,12 +251,13 @@ class _StageTile extends StatelessWidget {
   final SavedRoute stage;
   final StageLoad? load;
   final bool connected;
+  final UnitSystem units;
   final VoidCallback onLoad;
   final void Function(bool simulate) onRide;
   final VoidCallback? onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final done = tour.completed.contains(index);
     final ele = stage.elevation;
     final scheme = Theme.of(context).colorScheme;
@@ -262,10 +267,10 @@ class _StageTile extends StatelessWidget {
       ),
       title: Text(stage.name),
       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(routeDistanceText(stage.lengthMeters) +
+        Text(routeDistanceText(stage.lengthMeters, units) +
             (ele == null
                 ? ''
-                : ' · ↑ ${ele.climb.round()} m ↓ ${ele.descent.round()} m')),
+                : ' · ↑ ${elevationText(ele.climb, units)} ↓ ${elevationText(ele.descent, units)}')),
         if (load?.loading ?? false)
           const Padding(
             padding: EdgeInsets.only(top: 4),

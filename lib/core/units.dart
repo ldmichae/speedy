@@ -20,6 +20,26 @@ double distanceIn(double km, UnitSystem u) =>
     u == UnitSystem.imperial ? km / kmPerMile : km;
 String distanceUnit(UnitSystem u) => u == UnitSystem.imperial ? 'mi' : 'km';
 
+const feetPerMetre = 3.280839895;
+
+/// Elevation (metres) as "123 m" or "404 ft".
+String elevationText(double m, UnitSystem u) => u == UnitSystem.imperial
+    ? '${(m * feetPerMetre).round()} ft'
+    : '${m.round()} m';
+
+/// Route length (metres) as "850 m", "12.4 km", "400 ft" or "7.7 mi".
+String routeDistanceText(double meters, UnitSystem u) {
+  if (u == UnitSystem.imperial) {
+    final mi = meters / 1000 / kmPerMile;
+    return mi < 0.1
+        ? '${(meters * feetPerMetre).round()} ft'
+        : '${mi.toStringAsFixed(mi < 10 ? 2 : 1)} mi';
+  }
+  return meters < 1000
+      ? '${meters.round()} m'
+      : '${(meters / 1000).toStringAsFixed(meters < 10000 ? 2 : 1)} km';
+}
+
 double kgToPounds(double kg) => kg / kgPerPound;
 double poundsToKg(double lb) => lb * kgPerPound;
 

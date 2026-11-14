@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/route.dart';
+import 'package:indoor_cycling/core/units.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/core/tour.dart';
 import 'package:indoor_cycling/ui/elevation_chart.dart';
@@ -96,7 +97,7 @@ void main() {
     await c.read(toursProvider.future);
     c.read(routeRunProvider.notifier).start(c.read(toursProvider).value!.single, stage: 1);
     await t.pump();
-    final text = RouteMapTile.label(c.read(routeProgressProvider)!);
+    final text = RouteMapTile.label(c.read(routeProgressProvider)!, UnitSystem.metric);
     expect(text, startsWith('Stage 2/2'));
     expect(text, contains('to go'));
     expect(text, contains('left'));

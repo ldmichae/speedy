@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/elevation.dart';
+import '../core/units.dart';
+import 'units_controller.dart';
 
 /// Elevation over distance as a filled area, with an optional marker at
 /// [riderMeters]. Under 80 px tall it is shape only (a thumbnail).
-class ElevationChart extends StatelessWidget {
+class ElevationChart extends ConsumerWidget {
   const ElevationChart(
       {super.key,
       required this.profile,
@@ -21,16 +24,17 @@ class ElevationChart extends StatelessWidget {
   final double? yMin, yMax;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final units = ref.watch(rideUnitsProvider);
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
-      label: 'Elevation profile, ${profile.climb.round()} metres of climbing',
+      label: 'Elevation profile, ${elevationText(profile.climb, units)} of climbing',
       child: SizedBox(
         height: height,
         width: double.infinity,
         child: CustomPaint(
             painter: _ElevationPainter(profile, riderMeters, scheme.tertiary,
-                scheme.onSurfaceVariant, yMin, yMax)),
+                scheme.onSurfaceVariant, yMin, yMax, units)),
       ),
     );
   }
@@ -38,7 +42,9 @@ class ElevationChart extends StatelessWidget {
 
 class _ElevationPainter extends CustomPainter {
   _ElevationPainter(
-      this.p, this.rider, this.color, this.textColor, this.yMin, this.yMax);
+      this.p, this.rider, this.color, this.textColor, this.yMin, this.yMax,
+      this.units);
+  final UnitSystem units;
   final double? yMin, yMax;
   final ElevationProfile p;
   final double? rider;
@@ -105,8 +111,9 @@ class _ElevationPainter extends CustomPainter {
     }
 
     if (small) return;
-    _text(canvas, '${hi.round()} m', Offset.zero);
-    _text(canvas, '${lo.round()} m', Offset(0, size.height), bottom: true);
+    _text(canvas, elevationText(hi, units), Offset.zero);
+    _text(canvas, elevationText(lo, units), Offset(0, size.height),
+        bottom: true);
   }
 
   @override

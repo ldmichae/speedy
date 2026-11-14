@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:indoor_cycling/core/ride_recording.dart';
 import 'package:indoor_cycling/core/route.dart';
+import 'package:indoor_cycling/core/units.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
@@ -65,8 +66,11 @@ void main() {
   });
 
   test('distance text', () {
-    expect(routeDistanceText(850), '850 m');
-    expect(routeDistanceText(12400), '12.4 km');
+    expect(routeDistanceText(850, UnitSystem.metric), '850 m');
+    expect(routeDistanceText(12400, UnitSystem.metric), '12.4 km');
+    expect(routeDistanceText(12400, UnitSystem.imperial), '7.71 mi');
+    expect(routeDistanceText(100, UnitSystem.imperial), '328 ft');
+    expect(elevationText(100, UnitSystem.imperial), '328 ft');
   });
 
   test('OSRM response parses (lon,lat order); bad ones throw', () {

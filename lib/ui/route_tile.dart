@@ -3,28 +3,30 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/route.dart';
+import '../core/units.dart';
 import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
+import 'units_controller.dart';
 import 'navigation.dart';
 
 /// Dashboard tile: the route being ridden and the blue dot on it.
 class RouteMapTile extends ConsumerStatefulWidget {
   const RouteMapTile({super.key});
 
-  static String label(RouteProgress p) {
+  static String label(RouteProgress p, UnitSystem u) {
     final c = p.course;
     if (p.finished) return '${c.name} · finished';
     final g = c.gradeAt(p.meters);
     final grade = g == null ? '' : ' · ${g.toStringAsFixed(1)}%';
     if (c.stageCount == 1) {
-      return '${c.name} · ${routeDistanceText(c.lengthMeters - p.meters)} to go$grade';
+      return '${c.name} · ${routeDistanceText(c.lengthMeters - p.meters, u)} to go$grade';
     }
     final loading =
         c.stage(p.stage).elevation == null ? ' · no elevation yet' : '';
     return 'Stage ${p.stage + 1}/${c.stageCount} · '
-        '${routeDistanceText(p.stageRemaining)} to go · '
-        '${routeDistanceText(c.lengthMeters - p.meters)} left$grade$loading';
+        '${routeDistanceText(p.stageRemaining, u)} to go · '
+        '${routeDistanceText(c.lengthMeters - p.meters, u)} left$grade$loading';
   }
 
   @override
@@ -119,7 +121,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
                   child: Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Text(RouteMapTile.label(progress),
+                    child: Text(RouteMapTile.label(progress, ref.watch(rideUnitsProvider)),
                         maxLines: 2, overflow: TextOverflow.ellipsis),
                   ),
                 )),

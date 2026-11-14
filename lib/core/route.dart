@@ -179,7 +179,3 @@ class SavedRoute implements RideCourse {
   }
 }
 
-/// Metres to a readable distance, e.g. "850 m" or "12.4 km".
-String routeDistanceText(double meters) => meters < 1000
-    ? '${meters.round()} m'
-    : '${(meters / 1000).toStringAsFixed(meters < 10000 ? 2 : 1)} km';

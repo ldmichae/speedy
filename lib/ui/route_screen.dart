@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/elevation.dart';
 import '../core/route.dart';
+import '../core/units.dart';
 import '../core/route_service.dart';
 import '../devices/trainer.dart';
 import 'elevation_chart.dart';
@@ -12,6 +13,7 @@ import 'route_controller.dart';
 import 'route_map.dart';
 import 'navigation.dart';
 import 'trainer_controller.dart';
+import 'units_controller.dart';
 
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
@@ -52,10 +54,10 @@ class RoutesScreen extends ConsumerWidget {
                           child: ElevationChart(
                               profile: r.elevation!, height: 48)),
                   title: Text(r.name),
-                  subtitle: Text(routeDistanceText(r.lengthMeters) +
+                  subtitle: Text(routeDistanceText(r.lengthMeters, ref.watch(rideUnitsProvider)) +
                       (r.elevation == null
                           ? ''
-                          : ' · ↑ ${r.elevation!.climb.round()} m')),
+                          : ' · ↑ ${elevationText(r.elevation!.climb, ref.watch(rideUnitsProvider))}')),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                     IconButton(
                       tooltip: 'Delete',
@@ -311,7 +313,7 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(_loading ? 'Snapping…' : routeDistanceText(length),
+              Text(_loading ? 'Snapping…' : routeDistanceText(length, ref.watch(rideUnitsProvider)),
                   style: Theme.of(context).textTheme.titleMedium),
               IconButton(
                 tooltip: 'Undo last point',
@@ -340,7 +342,7 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
             if (_elevation != null) ...[
               const SizedBox(height: 8),
               ElevationChart(profile: _elevation!, height: 90),
-              Text(elevationSummary(_elevation!),
+              Text(elevationSummary(_elevation!, ref.watch(rideUnitsProvider)),
                   style: Theme.of(context).textTheme.bodySmall),
             ] else if (_points.length >= 2 && !_loading)
               Align(
