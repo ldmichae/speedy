@@ -85,9 +85,9 @@ class WorkoutBar extends ConsumerWidget {
     final c = ref.read(recorderProvider.notifier);
     final theme = Theme.of(context);
 
-    // 48 px high: the controls you reach for mid-ride. Space does the same as
+    // Slim, to leave the room to the map and chart. Space does the same as
     // Record, Pause and Resume.
-    const size = Size(0, 48);
+    const size = Size(0, 36);
     final fill = FilledButton.styleFrom(minimumSize: size);
     final outline = OutlinedButton.styleFrom(minimumSize: size);
 
@@ -142,7 +142,7 @@ class WorkoutBar extends ConsumerWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(children: [
           if (rec.status == RecStatus.recording)
             Padding(

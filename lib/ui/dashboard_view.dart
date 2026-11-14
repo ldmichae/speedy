@@ -103,7 +103,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         tooltip: 'View and trainer',
         // Narrower than the default 48 px, to fit a phone-width record bar.
         style: IconButton.styleFrom(
-            minimumSize: const Size(36, 48), padding: EdgeInsets.zero),
+            minimumSize: const Size(36, 36), padding: EdgeInsets.zero),
         icon: const Icon(Icons.more_vert),
         onSelected: (v) {
           if (v is RideView) {
