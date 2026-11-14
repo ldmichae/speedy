@@ -15,3 +15,6 @@ abstract class RideHistoryStore {
 }
 
 RideHistoryStore createRideHistoryStore() => impl.createStore();
+
+/// Where tours are kept: files on native, shared preferences on web.
+RideHistoryStore createTourStore() => impl.createStore(dir: 'tours');

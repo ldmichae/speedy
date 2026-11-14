@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,17 +11,32 @@ import '../core/prefs.dart';
 import '../core/ride_recording.dart';
 import '../core/route.dart';
 import '../core/route_service.dart';
+import '../core/terrain_cache.dart';
+import '../core/terrain_tiles.dart';
+import '../core/tour.dart';
 import '../devices/trainer_session.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
+import 'tour_controller.dart';
 import 'trainer_controller.dart';
 
 /// Overridable so tests never touch the network.
 final routeSnapperProvider = Provider<RouteSnapper>((ref) => OsrmSnapper());
 
-/// Overridable so tests never touch the network.
-final elevationSourceProvider =
-    Provider<ElevationSource>((ref) => OpenMeteoElevation());
+/// Terrain tiles first (cheap, cached, dense) on native; Open-Meteo when the
+/// tiles fail, and on web where a browser cannot read them. Overridable so
+/// tests never touch the network.
+final elevationSourceProvider = Provider<ElevationSource>((ref) {
+  final meteo = OpenMeteoElevation();
+  if (kIsWeb) return meteo;
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return CompositeElevation(
+    TerrainTileElevation(
+        fetch: httpTileFetcher(client), cache: createTerrainCache()),
+    meteo,
+  );
+});
 
 final routesProvider =
     NotifierProvider<RoutesController, List<SavedRoute>>(RoutesController.new);
@@ -51,19 +69,23 @@ class RoutesController extends PersistedNotifier<List<SavedRoute>> {
   void delete(SavedRoute r) => put([...state]..remove(r));
 }
 
-/// A route being ridden. [origin] is the ride distance (metres) at which the
-/// route's start line sits, so riding it mid-recording starts it at zero.
-/// With [simulate] the trainer applies the route's grade as resistance.
+/// A course being ridden (one route, or a tour). [origin] is the ride
+/// distance (metres) at which the course's start line sits, so riding
+/// mid-recording starts it at zero, or at the chosen stage of a tour.
+/// With [simulate] the trainer applies the course's grade as resistance.
 class RouteRun {
-  const RouteRun(this.route, this.origin, {this.simulate = false});
-  final SavedRoute route;
+  const RouteRun(this.course, this.origin, {this.simulate = false});
+  final RideCourse course;
   final double origin;
   final bool simulate;
 }
 
-final routeRunProvider = NotifierProvider<RouteRunner, RouteRun?>(RouteRunner.new);
+final routeRunProvider =
+    NotifierProvider<RouteRunner, RouteRun?>(RouteRunner.new);
 
 class RouteRunner extends Notifier<RouteRun?> {
+  int _doneUpTo = 0; // tour stages before this index are marked ridden
+
   @override
   RouteRun? build() {
     ref.listen(recorderProvider.select((r) => r.status), (_, s) {
@@ -71,16 +93,31 @@ class RouteRunner extends Notifier<RouteRun?> {
     });
     // Once a second while riding: follow the road's grade.
     ref.listen(recorderProvider, (_, __) => _sync());
+    // A tour being ridden gains elevation as stages load: use the new copy.
+    ref.listen(toursProvider, (_, next) {
+      final r = state, c = r?.course;
+      if (r == null || c is! Tour) return;
+      final fresh = next.valueOrNull?.where((t) => t.id == c.id).firstOrNull;
+      if (fresh != null && !identical(fresh, c)) {
+        state = RouteRun(fresh, r.origin, simulate: r.simulate);
+      }
+    });
     return null;
   }
 
-  /// Starts recording (or resumes it) and puts the rider at the route's
-  /// start. [simulate] needs elevation and takes the target from any plan.
-  void start(SavedRoute route, {bool simulate = false}) {
-    final sim = simulate && route.elevation != null;
+  /// Starts recording (or resumes it) and puts the rider at the start of
+  /// [course], or of [stage] for a tour. [simulate] takes the target from any
+  /// plan; where elevation is not loaded yet it rides flat.
+  void start(RideCourse course, {bool simulate = false, int stage = 0}) {
+    final sim =
+        simulate && (course.stageCount > 1 || course.elevationAt(0) != null);
     if (sim) ref.read(planRunProvider.notifier).stop();
     ref.read(recorderProvider.notifier).startOrResume();
-    state = RouteRun(route, ref.read(liveRideStatsProvider).distanceMeters,
+    _doneUpTo = stage;
+    state = RouteRun(
+        course,
+        ref.read(liveRideStatsProvider).distanceMeters -
+            course.stageStart(stage),
         simulate: sim);
     _sync();
   }
@@ -89,7 +126,7 @@ class RouteRunner extends Notifier<RouteRun?> {
   void endSimulation() {
     final r = state;
     if (r == null || !r.simulate) return;
-    state = RouteRun(r.route, r.origin);
+    state = RouteRun(r.course, r.origin);
     _leaveSim();
   }
 
@@ -106,19 +143,34 @@ class RouteRunner extends Notifier<RouteRun?> {
 
   void _sync() {
     final r = state;
-    final ele = r?.route.elevation;
-    if (r == null || !r.simulate || ele == null) return;
+    if (r == null) return;
     if (ref.read(recorderProvider).status != RecStatus.recording) return;
+    final len = r.course.lengthMeters;
     final meters = (ref.read(liveRideStatsProvider).distanceMeters - r.origin)
-        .clamp(0.0, r.route.lengthMeters)
+        .clamp(0.0, len)
         .toDouble();
-    final grade =
-        meters >= r.route.lengthMeters ? 0.0 : ele.gradeAt(meters); // flat at the finish
+    _markStages(r.course, meters);
+    final c = r.course;
+    if (c is Tour) ref.read(tourElevationProvider.notifier).prefetch(c, meters);
+    if (!r.simulate) return;
+    // Flat at the finish, and wherever elevation has not loaded yet.
+    final grade = meters >= len ? 0.0 : (r.course.gradeAt(meters) ?? 0.0);
     final t = ref.read(trainerControllerProvider);
     // Compared with what the trainer was last told, so a reconnect re-sends.
-    if (t.gradePercent == null || (t.gradePercent! - TrainerSession.clampGrade(grade)).abs() >= 0.2) {
+    if (t.gradePercent == null ||
+        (t.gradePercent! - TrainerSession.clampGrade(grade)).abs() >= 0.2) {
       ref.read(trainerControllerProvider.notifier).setGrade(grade);
     }
+  }
+
+  /// Passing the end of a tour stage ticks it off.
+  void _markStages(RideCourse c, double meters) {
+    if (c is! Tour) return;
+    final upTo = meters >= c.lengthMeters ? c.stageCount : c.stageAt(meters);
+    for (var i = _doneUpTo; i < upTo; i++) {
+      ref.read(toursProvider.notifier).markCompleted(c.id, i);
+    }
+    if (upTo > _doneUpTo) _doneUpTo = upTo;
   }
 }
 
@@ -133,15 +185,22 @@ final targetLockProvider = Provider<TargetLock?>((ref) {
   return null;
 });
 
-/// Where the rider is on the route being ridden.
+/// Where the rider is on the course being ridden.
 class RouteProgress {
-  const RouteProgress(this.route, this.meters, this.position);
-  final SavedRoute route;
+  const RouteProgress(this.course, this.meters, this.position);
+  final RideCourse course;
   final double meters;
   final LatLng position;
 
-  double get fraction => route.lengthMeters == 0 ? 1 : meters / route.lengthMeters;
-  bool get finished => meters >= route.lengthMeters;
+  double get fraction =>
+      course.lengthMeters == 0 ? 1 : meters / course.lengthMeters;
+  bool get finished => meters >= course.lengthMeters;
+
+  /// The stage you are in, and how far through / from the end of it.
+  int get stage => course.stageAt(meters);
+  double get stageMeters => meters - course.stageStart(stage);
+  double get stageRemaining =>
+      course.stageStart(stage) + course.stage(stage).lengthMeters - meters;
 }
 
 /// Null when no route is being ridden. Position follows distance ridden,
@@ -150,6 +209,28 @@ final routeProgressProvider = Provider<RouteProgress?>((ref) {
   final run = ref.watch(routeRunProvider);
   if (run == null) return null;
   final ridden = ref.watch(liveRideStatsProvider).distanceMeters - run.origin;
-  final m = ridden.clamp(0.0, run.route.lengthMeters).toDouble();
-  return RouteProgress(run.route, m, run.route.positionAt(m));
+  final m = ridden.clamp(0.0, run.course.lengthMeters).toDouble();
+  return RouteProgress(run.course, m, run.course.positionAt(m));
 });
+
+/// Which roads new route segments may use. Remembered between sessions.
+final roadProfileProvider =
+    NotifierProvider<RoadProfileController, RoadProfile>(RoadProfileController.new);
+
+class RoadProfileController extends PersistedNotifier<RoadProfile> {
+  static const _key = 'roadProfile';
+
+  @override
+  RoadProfile get defaults => RoadProfile.car;
+
+  @override
+  RoadProfile? read(SharedPreferences p) {
+    final name = p.getString(_key);
+    return RoadProfile.values.where((r) => r.name == name).firstOrNull;
+  }
+
+  @override
+  Future<void> write(SharedPreferences p, RoadProfile v) => p.setString(_key, v.name);
+
+  void set(RoadProfile v) => put(v);
+}

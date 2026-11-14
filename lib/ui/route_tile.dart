@@ -12,6 +12,21 @@ import 'route_screen.dart';
 class RouteMapTile extends ConsumerStatefulWidget {
   const RouteMapTile({super.key});
 
+  static String label(RouteProgress p) {
+    final c = p.course;
+    if (p.finished) return '${c.name} · finished';
+    final g = c.gradeAt(p.meters);
+    final grade = g == null ? '' : ' · ${g.toStringAsFixed(1)}%';
+    if (c.stageCount == 1) {
+      return '${c.name} · ${routeDistanceText(c.lengthMeters - p.meters)} to go$grade';
+    }
+    final loading =
+        c.stage(p.stage).elevation == null ? ' · no elevation yet' : '';
+    return 'Stage ${p.stage + 1}/${c.stageCount} · '
+        '${routeDistanceText(p.stageRemaining)} to go · '
+        '${routeDistanceText(c.lengthMeters - p.meters)} left$grade$loading';
+  }
+
   @override
   ConsumerState<RouteMapTile> createState() => _RouteMapTileState();
 }
@@ -62,7 +77,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
       );
     }
 
-    final r = progress.route;
+    final r = progress.course.stage(progress.stage); // the stage being ridden
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -74,6 +89,8 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
               options: MapOptions(
                 initialCenter: progress.position,
                 initialZoom: _followZoom,
+                minZoom: minMapZoom,
+                maxZoom: maxMapZoom,
                 interactionOptions:
                     const InteractionOptions(flags: InteractiveFlag.none),
                 onMapReady: () {
@@ -82,7 +99,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
                 },
               ),
               children: [
-                ...mapBaseLayers(ref),
+                ...mapBaseLayers(ref, panBuffer: 0),
                 PolylineLayer(polylines: [routeLine(r.path)]),
                 MarkerLayer(markers: [riderMarker(progress.position)]),
               ],
@@ -92,7 +109,8 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
               left: 8,
               right: 8,
               child: Row(children: [
-                DecoratedBox(
+                Flexible(
+                    child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: Theme.of(context)
                         .colorScheme
@@ -103,13 +121,11 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
                   child: Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Text(progress.finished
-                        ? '${r.name} · finished'
-                        : '${r.name} · ${routeDistanceText(r.lengthMeters - progress.meters)} to go'
-                            '${r.elevation == null ? '' : ' · ${r.elevation!.gradeAt(progress.meters).toStringAsFixed(1)}%'}'),
+                    child: Text(RouteMapTile.label(progress),
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
                   ),
-                ),
-                const Spacer(),
+                )),
+                const SizedBox(width: 8),
                 IconButton.filledTonal(
                   tooltip: _follow ? 'Show whole route' : 'Follow me',
                   icon: Icon(_follow ? Icons.zoom_out_map : Icons.my_location),
@@ -135,7 +151,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
             child: ElevationChart(
                 profile: r.elevation!,
                 height: 64,
-                riderMeters: progress.meters),
+                riderMeters: progress.stageMeters),
           ),
       ]),
     );

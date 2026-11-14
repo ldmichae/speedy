@@ -4,20 +4,25 @@ import 'package:path_provider/path_provider.dart';
 
 import 'ride_history_store.dart';
 
-RideHistoryStore createStore() => FileRideHistoryStore();
+RideHistoryStore createStore({String dir = 'history'}) =>
+    FileRideHistoryStore(dir);
 
 /// One JSON file per ride under the app support folder's `history` directory.
 class FileRideHistoryStore implements RideHistoryStore {
+  FileRideHistoryStore([this.dirName = 'history']);
+  final String dirName;
+
   Future<Directory> _dir() async {
     final base = await getApplicationSupportDirectory();
-    return Directory('${base.path}${Platform.pathSeparator}history')
+    return Directory('${base.path}${Platform.pathSeparator}$dirName')
         .create(recursive: true);
   }
 
   @override
   Future<void> save(String id, String json) async {
     final dir = await _dir();
-    await File('${dir.path}${Platform.pathSeparator}$id.json').writeAsString(json);
+    await File('${dir.path}${Platform.pathSeparator}$id.json')
+        .writeAsString(json);
   }
 
   @override

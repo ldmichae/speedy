@@ -15,27 +15,52 @@ final route = SavedRoute('R', const [LatLng(0, 0), LatLng(0.002, 0)],
     const [LatLng(0, 0), LatLng(0.001, 0), LatLng(0.002, 0)]);
 
 class FakeSnapper implements RouteSnapper {
+  RoadProfile? lastProfile;
   bool fail = false;
   @override
-  Future<List<LatLng>> snap(LatLng a, LatLng b) async =>
-      fail ? throw Exception('down') : [a, const LatLng(0.0005, 0), b];
+  Future<List<LatLng>> snap(LatLng a, LatLng b,
+      {RoadProfile profile = RoadProfile.car}) async {
+    lastProfile = profile;
+    if (fail) throw Exception('down');
+    return [a, const LatLng(0.0005, 0), b];
+  }
 }
 
 void main() {
+  roadProfileTests();
   test('length and positionAt interpolate and clamp', () {
     expect(route.lengthMeters, closeTo(222, 2));
     expect(route.positionAt(-5), route.path.first);
     expect(route.positionAt(1e9), route.path.last);
-    expect(route.positionAt(route.lengthMeters / 2).latitude, closeTo(0.001, 1e-5));
-    expect(route.positionAt(route.lengthMeters / 4).latitude, closeTo(0.0005, 1e-5));
+    expect(route.positionAt(route.lengthMeters / 2).latitude,
+        closeTo(0.001, 1e-5));
+    expect(route.positionAt(route.lengthMeters / 4).latitude,
+        closeTo(0.0005, 1e-5));
   });
 
   test('json round-trips and rejects junk', () {
     final back = SavedRoute.fromJson(route.toJson())!;
     expect(back.name, 'R');
     expect(back.path.length, 3);
-    expect(SavedRoute.fromJson({'name': 'x', 'wp': [], 'path': [[0, 0]]}), isNull);
-    expect(SavedRoute.fromJson({'name': 'x', 'wp': [], 'path': [[95, 0], [0, 0]]}), isNull);
+    expect(
+        SavedRoute.fromJson({
+          'name': 'x',
+          'wp': [],
+          'path': [
+            [0, 0]
+          ]
+        }),
+        isNull);
+    expect(
+        SavedRoute.fromJson({
+          'name': 'x',
+          'wp': [],
+          'path': [
+            [95, 0],
+            [0, 0]
+          ]
+        }),
+        isNull);
     expect(SavedRoute.fromJson('nope'), isNull);
   });
 
@@ -48,10 +73,11 @@ void main() {
     final pts = parseOsrmRoute(
         '{"code":"Ok","routes":[{"geometry":{"coordinates":[[13.1,52.2],[13.2,52.3]]}}]}');
     expect(pts.first, const LatLng(52.2, 13.1));
-    expect(() => parseOsrmRoute('{"code":"NoRoute","routes":[]}'), throwsFormatException);
+    expect(() => parseOsrmRoute('{"code":"NoRoute","routes":[]}'),
+        throwsFormatException);
   });
 
-  test('OsrmSnapper requests the bike server, spaced out', () async {
+  test('OsrmSnapper requests the road engine, spaced out', () async {
     final times = <DateTime>[];
     final urls = <Uri>[];
     final s = OsrmSnapper(
@@ -60,23 +86,27 @@ void main() {
         times.add(DateTime.now());
         urls.add(req.url);
         return http.Response(
-            '{"code":"Ok","routes":[{"geometry":{"coordinates":[[1,2],[3,4]]}}]}', 200);
+            '{"code":"Ok","routes":[{"geometry":{"coordinates":[[1,2],[3,4]]}}]}',
+            200);
       }),
     );
     await Future.wait([
       s.snap(const LatLng(2, 1), const LatLng(4, 3)),
       s.snap(const LatLng(2, 1), const LatLng(4, 3)),
     ]);
-    expect(urls.first.path, contains('routed-bike'));
+    expect(urls.first.path, contains('routed-car'));
     expect(urls.first.path, contains('1.0,2.0;3.0,4.0'));
-    expect(times[1].difference(times[0]).inMilliseconds, greaterThanOrEqualTo(70));
+    expect(
+        times[1].difference(times[0]).inMilliseconds, greaterThanOrEqualTo(70));
   });
 
   test('snapOrStraight falls back to a straight line', () async {
     final s = FakeSnapper();
-    expect((await snapOrStraight(s, const LatLng(0, 0), const LatLng(1, 1))).$2, isTrue);
+    expect((await snapOrStraight(s, const LatLng(0, 0), const LatLng(1, 1))).$2,
+        isTrue);
     s.fail = true;
-    final (path, ok) = await snapOrStraight(s, const LatLng(0, 0), const LatLng(1, 1));
+    final (path, ok) =
+        await snapOrStraight(s, const LatLng(0, 0), const LatLng(1, 1));
     expect(ok, isFalse);
     expect(path.length, 2);
   });
@@ -107,5 +137,51 @@ void main() {
     c.read(recorderProvider.notifier).discard();
     expect(c.read(routeRunProvider), isNull);
     expect(c.read(routeProgressProvider), isNull);
+  });
+}
+
+void roadProfileTests() {
+  test('segments use any road (car engine) unless the bike engine is asked for',
+      () async {
+    final urls = <Uri>[];
+    final s = OsrmSnapper(
+      gap: const Duration(milliseconds: 1),
+      client: MockClient((req) async {
+        urls.add(req.url);
+        return http.Response(
+            '{"code":"Ok","routes":[{"geometry":{"coordinates":[[1,2],[3,4]]}}]}',
+            200);
+      }),
+    );
+    await s.snap(const LatLng(2, 1), const LatLng(4, 3));
+    await s.snap(const LatLng(2, 1), const LatLng(4, 3),
+        profile: RoadProfile.bike);
+    expect(urls[0].path, contains('routed-car'));
+    expect(urls[1].path, contains('routed-bike'));
+    expect(
+        RoadProfile.values.map((p) => p.label), ['Any road', 'Bike-friendly']);
+  });
+
+  test('snapOrStraight passes the profile through', () async {
+    final s = FakeSnapper();
+    await snapOrStraight(s, const LatLng(0, 0), const LatLng(1, 1),
+        profile: RoadProfile.bike);
+    expect(s.lastProfile, RoadProfile.bike);
+    await snapOrStraight(s, const LatLng(0, 0), const LatLng(1, 1));
+    expect(s.lastProfile, RoadProfile.car);
+  });
+
+  test('the road choice defaults to any road and is remembered', () async {
+    SharedPreferences.setMockInitialValues({});
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    expect(c.read(roadProfileProvider), RoadProfile.car);
+    c.read(roadProfileProvider.notifier).set(RoadProfile.bike);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final c2 = ProviderContainer();
+    addTearDown(c2.dispose);
+    c2.read(roadProfileProvider);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(c2.read(roadProfileProvider), RoadProfile.bike);
   });
 }

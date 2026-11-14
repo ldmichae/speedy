@@ -10,6 +10,7 @@ import '../devices/trainer.dart';
 import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
+import 'tour_screen.dart';
 import 'trainer_controller.dart';
 
 class RoutesButton extends StatelessWidget {
@@ -41,7 +42,14 @@ class RoutesScreen extends ConsumerWidget {
     final connected = ref.watch(trainerControllerProvider
         .select((s) => s.status == TrainerStatus.connected));
     return Scaffold(
-      appBar: AppBar(title: const Text('Routes')),
+      appBar: AppBar(title: const Text('Routes'), actions: [
+        TextButton.icon(
+          onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ToursScreen())),
+          icon: const Icon(Icons.hiking),
+          label: const Text('Tours'),
+        ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _draw(context, ref),
         icon: const Icon(Icons.add),
@@ -62,7 +70,8 @@ class RoutesScreen extends ConsumerWidget {
                       ? const Icon(Icons.route)
                       : SizedBox(
                           width: 96,
-                          child: ElevationChart(profile: r.elevation!, height: 48)),
+                          child: ElevationChart(
+                              profile: r.elevation!, height: 48)),
                   title: Text(r.name),
                   subtitle: Text(routeDistanceText(r.lengthMeters) +
                       (r.elevation == null
@@ -72,7 +81,8 @@ class RoutesScreen extends ConsumerWidget {
                     IconButton(
                       tooltip: 'Delete',
                       icon: const Icon(Icons.delete_outline),
-                      onPressed: () => ref.read(routesProvider.notifier).delete(r),
+                      onPressed: () =>
+                          ref.read(routesProvider.notifier).delete(r),
                     ),
                     if (r.elevation != null)
                       IconButton.filledTonal(
@@ -120,16 +130,39 @@ class _Leg {
 /// Click the map to add waypoints; each stretch snaps to roads. Pops the
 /// finished [SavedRoute].
 class RouteEditor extends ConsumerStatefulWidget {
-  const RouteEditor({super.key});
+  const RouteEditor({
+    super.key,
+    this.title = 'Draw a route',
+    this.initialName = '',
+    this.startAt,
+    this.fetchElevationOnSave = true,
+  });
+
+  final String title;
+  final String initialName;
+
+  /// Pre-places the first point (a tour stage continues where the last ended).
+  final LatLng? startAt;
+
+  /// Single routes look up elevation when saved; tour stages leave it until
+  /// asked for (or until a ride needs it).
+  final bool fetchElevationOnSave;
 
   @override
   ConsumerState<RouteEditor> createState() => _RouteEditorState();
 }
 
 class _RouteEditorState extends ConsumerState<RouteEditor> {
-  final _name = TextEditingController();
+  late final _name = TextEditingController(text: widget.initialName);
   final _points = <LatLng>[];
   final _legs = <_Leg>[];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startAt != null) _points.add(widget.startAt!);
+  }
+
   ElevationProfile? _elevation;
   bool _elevLoading = false;
   String? _elevError;
@@ -149,8 +182,10 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
     });
     if (_legs.isEmpty) return;
     final leg = _legs.last;
+    final profile = ref.read(roadProfileProvider);
     final (path, ok) =
-        await snapOrStraight(ref.read(routeSnapperProvider), leg.from, leg.to);
+        await snapOrStraight(ref.read(routeSnapperProvider), leg.from, leg.to,
+            profile: profile);
     if (!mounted || !_legs.contains(leg)) return; // undone meanwhile
     setState(() {
       leg.path = path;
@@ -173,7 +208,9 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
 
   SavedRoute _draft() {
     final name = _name.text.trim();
-    return SavedRoute(name.isEmpty ? 'Untitled route' : name, List.of(_points), _path);
+    // About 5 m of detail is plenty and keeps long routes small to store.
+    return SavedRoute(name.isEmpty ? 'Untitled route' : name, List.of(_points),
+        simplifyPath(_path));
   }
 
   /// Looks up heights for the drawn path; a failure is shown, not fatal.
@@ -183,8 +220,15 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
       _elevError = null;
     });
     try {
-      final e = await buildElevation(_draft(), ref.read(elevationSourceProvider));
+      final e =
+          await buildElevation(_draft(), ref.read(elevationSourceProvider));
       if (mounted) setState(() => _elevation = e);
+    } on ElevationRateLimited catch (e) {
+      if (mounted) {
+        setState(() => _elevError = 'The free elevation service is busy. Try '
+            'again in ${(e.retryAfter.inSeconds / 60).ceil()} min, or save '
+            'without it.');
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _elevError = 'Could not load elevation. The route can '
@@ -196,7 +240,9 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
   }
 
   Future<void> _save() async {
-    if (_elevation == null && !_elevLoading) await _loadElevation();
+    if (widget.fetchElevationOnSave && _elevation == null && !_elevLoading) {
+      await _loadElevation();
+    }
     if (!mounted) return;
     Navigator.of(context).pop(_draft().withElevation(_elevation));
   }
@@ -209,18 +255,25 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Draw a route'),
+        title: Text(widget.title),
         actions: [
-          TextButton(onPressed: canSave ? _save : null, child: const Text('Save')),
+          TextButton(
+              onPressed: canSave ? _save : null, child: const Text('Save')),
         ],
       ),
       body: Column(children: [
         Expanded(
           child: FlutterMap(
             options: MapOptions(
-              initialCenter: ref.read(routesProvider).lastOrNull?.path.first ??
+              initialCenter: widget.startAt ??
+                  ref.read(routesProvider).lastOrNull?.path.first ??
                   const LatLng(48, 10),
-              initialZoom: ref.read(routesProvider).isEmpty ? 4 : 13,
+              initialZoom:
+                  widget.startAt != null || ref.read(routesProvider).isNotEmpty
+                      ? 13
+                      : 4,
+              minZoom: minMapZoom,
+              maxZoom: maxMapZoom,
               onTap: (_, p) => _add(p),
             ),
             children: [
@@ -235,7 +288,8 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
                     child: CircleAvatar(
                       backgroundColor: i == 0 ? Colors.green : scheme.primary,
                       child: Text('${i + 1}',
-                          style: const TextStyle(fontSize: 11, color: Colors.white)),
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.white)),
                     ),
                   ),
               ]),
@@ -244,7 +298,32 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
         ),
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              SegmentedButton<RoadProfile>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final p in RoadProfile.values)
+                    ButtonSegment(value: p, label: Text(p.label)),
+                ],
+                selected: {ref.watch(roadProfileProvider)},
+                onSelectionChanged: (s) =>
+                    ref.read(roadProfileProvider.notifier).set(s.first),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  ref.watch(roadProfileProvider) == RoadProfile.car
+                      ? 'Motorways and tunnels allowed. Cycle paths and '
+                          'tracks are not. Applies to points you add next.'
+                      : 'Avoids motorways and tunnels, uses cycle paths. '
+                          'Applies to points you add next.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
             Row(children: [
               Expanded(
                 child: TextField(
@@ -274,8 +353,10 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
                       ? 'Some segments could not snap to roads and are drawn '
                           'straight. Undo and try again, or keep them.'
                       : '${_points.length} points',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: _anyStraight ? scheme.error : null),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: _anyStraight ? scheme.error : null),
             ),
             if (_elevation != null) ...[
               const SizedBox(height: 8),
@@ -288,7 +369,8 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
                 child: TextButton.icon(
                   onPressed: _elevLoading ? null : _loadElevation,
                   icon: const Icon(Icons.terrain),
-                  label: Text(_elevLoading ? 'Loading elevation…' : 'Show elevation'),
+                  label: Text(
+                      _elevLoading ? 'Loading elevation…' : 'Show elevation'),
                 ),
               ),
             if (_elevError != null)

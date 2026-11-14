@@ -24,10 +24,10 @@ class _Blank extends TileProvider {
 
 class _Straight implements RouteSnapper {
   @override
-  Future<List<LatLng>> snap(LatLng a, LatLng b) async => [a, b];
+  Future<List<LatLng>> snap(LatLng a, LatLng b, {RoadProfile profile = RoadProfile.car}) async => [a, b];
 }
 
-class _Hills implements ElevationSource {
+class _Hills extends ElevationSource {
   bool fail = false;
   @override
   Future<List<double>> elevations(List<LatLng> p) async => fail

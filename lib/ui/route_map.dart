@@ -1,28 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+
+import '../core/route_service.dart' show appUserAgent;
 
 /// One place to change where map tiles come from. The public OSM server is
 /// for light use only (see its tile usage policy); swap this for a keyed
 /// provider if the app ever grows past a rider or two.
 const tileUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
+/// Zoom range we allow. OSM serves up to 19; closer than that is just more
+/// requests, and the whole-world view is not useful for planning rides.
+const minMapZoom = 3.0, maxMapZoom = 18.0;
+
 /// Overridable so tests do not fetch tiles.
-final tileProviderProvider = Provider<TileProvider>((ref) => NetworkTileProvider());
+///
+/// Good-citizen settings for the public OSM server: an identifying
+/// User-Agent (native; browsers set their own and send a Referer), no
+/// automatic retries (flutter_map's default client retries failures), the
+/// built-in disk cache that honours the server's cache headers, and
+/// cancelling requests for tiles that scrolled away.
+final tileProviderProvider = Provider<TileProvider>((ref) {
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return NetworkTileProvider(
+    httpClient: client,
+    headers: {if (!kIsWeb) 'User-Agent': appUserAgent},
+    abortObsoleteRequests: true,
+  );
+});
 
 /// Tiles plus the attribution OSM and the FOSSGIS router require.
-List<Widget> mapBaseLayers(WidgetRef ref) => [
+/// [panBuffer] is how many extra rings of tiles to load around the view:
+/// 0 where the map barely moves (the ride tile), 1 where you pan (the editor).
+List<Widget> mapBaseLayers(WidgetRef ref, {int panBuffer = 1}) => [
       TileLayer(
         urlTemplate: tileUrlTemplate,
-        userAgentPackageName: 'com.example.indoor_cycling',
+        userAgentPackageName: 'indoor_cycling',
         tileProvider: ref.watch(tileProviderProvider),
+        maxNativeZoom: 19,
+        panBuffer: panBuffer,
       ),
       const RichAttributionWidget(
         alignment: AttributionAlignment.bottomLeft,
         attributions: [
           TextSourceAttribution('© OpenStreetMap contributors'),
           TextSourceAttribution('Routing: FOSSGIS OSRM'),
+          TextSourceAttribution('Elevation: AWS Terrain Tiles, Open-Meteo'),
         ],
       ),
     ];
