@@ -1,0 +1,25 @@
+name: indoor_cycling
+description: Indoor cycling training app. ERG workouts first, world sim later.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  # Pin to the version pub resolves once it works for you.
+  path_provider: ^2.1.6
+  shared_preferences: ^2.5.6
+  universal_ble: any
+  wakelock_plus: ^1.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
