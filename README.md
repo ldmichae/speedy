@@ -1,5 +1,7 @@
 # Indoor Cycling
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-speedymcpuffin-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/speedymcpuffin)
+
 A Flutter app for riding a smart trainer indoors. It connects to a Wahoo KICKR
 Core (or any trainer that speaks the standard Fitness Machine Service, FTMS)
 over Bluetooth, shows your live numbers, holds an ERG power target or follows a

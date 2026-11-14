@@ -60,3 +60,32 @@ class CreditsList extends ConsumerWidget {
     ]);
   }
 }
+
+const coffeeUrl = 'https://buymeacoffee.com/speedymcpuffin';
+
+/// A link to the maker's Buy Me a Coffee page.
+class CoffeeButton extends ConsumerWidget {
+  const CoffeeButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final messenger = ScaffoldMessenger.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FilledButton.tonalIcon(
+        icon: const Icon(Icons.coffee_outlined),
+        label: const Text('Buy me a coffee'),
+        onPressed: () async {
+          var ok = false;
+          try {
+            ok = await ref.read(urlOpenerProvider)(Uri.parse(coffeeUrl));
+          } catch (_) {}
+          if (!ok) {
+            messenger.showSnackBar(
+                const SnackBar(content: Text('Could not open ')));
+          }
+        },
+      ),
+    );
+  }
+}

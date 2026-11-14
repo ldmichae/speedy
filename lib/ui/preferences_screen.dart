@@ -70,6 +70,11 @@ class PreferencesScreen extends ConsumerWidget {
       child: _RiderProfileForm(),
     );
 
+    const supportSection = _Section(
+      title: 'Support',
+      description: 'Like the app? A coffee helps keep it going.',
+      child: CoffeeButton(),
+    );
     const creditsSection = _Section(
       title: 'Credits',
       description: 'Map, route and elevation data come from these projects. '
@@ -105,12 +110,12 @@ class PreferencesScreen extends ConsumerWidget {
                   if (wide)
                     // Short settings on the left, the longer profile form on the right.
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: stack([appearance, recording, training, creditsSection])),
+                      Expanded(child: stack([appearance, recording, training, supportSection, creditsSection])),
                       const SizedBox(width: 24),
                       Expanded(child: stack([units, profile])),
                     ])
                   else
-                    stack([appearance, recording, training, units, profile, creditsSection]),
+                    stack([appearance, recording, training, units, profile, supportSection, creditsSection]),
                 ],
               ),
             ),
