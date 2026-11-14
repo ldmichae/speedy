@@ -12,6 +12,7 @@ import 'route_controller.dart';
 import 'route_map.dart';
 import 'route_screen.dart';
 import 'tour_controller.dart';
+import 'tour_split_screen.dart';
 import 'navigation.dart';
 import 'trainer_controller.dart';
 import 'units_controller.dart';
@@ -61,47 +62,16 @@ class ToursScreen extends ConsumerWidget {
     }
   }
 
-  /// Picks a GPX, asks for a name and stage length, and splits it into stages.
+  /// Picks a GPX, lets the rider choose where stages end, and makes the tour.
   Future<void> _fromGpx(BuildContext context, WidgetRef ref) async {
     final route = await pickGpxRoute(context);
     if (route == null || !context.mounted) return;
-    final units = ref.read(rideUnitsProvider);
-    final name = TextEditingController(text: route.name);
-    final len = TextEditingController(
-        text: distanceIn(50, units).round().toString());
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tour from GPX'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(routeDistanceText(route.lengthMeters, units)),
-          TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: 'Name')),
-          TextField(
-            controller: len,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-                labelText: 'Longest stage (${distanceUnit(units)})'),
-          ),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Create')),
-        ],
-      ),
-    );
-    final km = (double.tryParse(len.text) ?? 0) *
-        (units == UnitSystem.imperial ? kmPerMile : 1);
-    if (ok != true || km <= 0) return;
-    final tour = Tour(
-        DateTime.now().millisecondsSinceEpoch.toString(),
-        name.text.trim().isEmpty ? route.name : name.text.trim(),
-        route.splitInto(km * 1000));
+    final choice = await Navigator.of(context).push<(String, List<double>)>(
+        MaterialPageRoute(builder: (_) => TourSplitScreen(route: route)));
+    if (choice == null) return;
+    final (name, cuts) = choice;
+    final tour = Tour(DateTime.now().millisecondsSinceEpoch.toString(),
+        name.trim().isEmpty ? route.name : name.trim(), route.splitAt(cuts));
     await ref.read(toursProvider.notifier).upsert(tour);
     if (context.mounted) {
       await Navigator.of(context).push(

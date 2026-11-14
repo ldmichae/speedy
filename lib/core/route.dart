@@ -169,9 +169,15 @@ class SavedRoute implements RideCourse {
   /// Splits into the fewest equal stages no longer than [stageMeters].
   List<SavedRoute> splitInto(double stageMeters) {
     final n = (lengthMeters / stageMeters).ceil().clamp(1, 1 << 20);
-    final len = lengthMeters / n;
+    return splitAt([for (var i = 1; i < n; i++) lengthMeters * i / n]);
+  }
+
+  /// Stages cut at [cuts] (metres from the start, strictly inside the route).
+  List<SavedRoute> splitAt(List<double> cuts) {
+    final b = [0.0, ...(List.of(cuts)..sort()), lengthMeters];
     return [
-      for (var i = 0; i < n; i++) slice(len * i, len * (i + 1), 'Stage ${i + 1}')
+      for (var i = 0; i < b.length - 1; i++)
+        slice(b[i], b[i + 1], 'Stage ${i + 1}')
     ];
   }
 
