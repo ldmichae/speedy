@@ -1,6 +1,12 @@
 # Indoor Cycling
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-speedymcpuffin-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/speedymcpuffin)
+<p align="center">
+  <a href="https://buymeacoffee.com/speedymcpuffin">
+    <img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=speedymcpuffin&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" height="60">
+  </a>
+  <br>
+  <sub>Enjoying the app? A coffee helps keep it going.</sub>
+</p>
 
 A Flutter app for riding a smart trainer indoors. It connects to a Wahoo KICKR
 Core (or any trainer that speaks the standard Fitness Machine Service, FTMS)
