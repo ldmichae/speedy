@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/ride_record.dart';
+import '../core/power_fun.dart';
 import 'format.dart';
 import 'layout.dart';
+import 'power_fun.dart';
 import 'ride_chart.dart';
 import 'ride_history_provider.dart';
 import 'units_controller.dart';
@@ -41,7 +43,9 @@ class HistoryScreen extends ConsumerWidget {
               child: rides.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Could not load rides: $e')),
-                data: (list) => list.isEmpty
+                data: (list) => Column(children: [
+                  if (list.isNotEmpty) _LifetimePower(rides: list),
+                  Expanded(child: list.isEmpty
                     ? const Center(
                         child: Padding(
                           padding: EdgeInsets.all(24),
@@ -73,7 +77,8 @@ class HistoryScreen extends ConsumerWidget {
                             itemCount: list.length,
                             separatorBuilder: (_, __) => const SizedBox(height: 12),
                             itemBuilder: (_, i) => _RideCard(ride: list[i]),
-                          ),
+                          )),
+                ]),
               ),
             ),
           );
@@ -241,6 +246,31 @@ class RideDetailScreen extends ConsumerWidget {
             ),
           );
         }),
+      ),
+    );
+  }
+}
+
+/// Everything ever pedalled, with the fun comparisons.
+class _LifetimePower extends StatelessWidget {
+  const _LifetimePower({required this.rides});
+
+  final List<RideRecord> rides;
+
+  @override
+  Widget build(BuildContext context) {
+    final joules = rides.fold(0.0, (a, r) => a + rideJoules(r.samples));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: SizedBox(
+        width: double.infinity,
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: PowerFun(joules: joules, title: 'All your rides'),
+          ),
+        ),
       ),
     );
   }

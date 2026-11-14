@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/ride_recording.dart';
 import '../core/ride_stats.dart';
 import 'format.dart';
+import '../core/power_fun.dart';
+import 'power_fun.dart';
 import 'recorder_controller.dart';
 import 'rider_profile_controller.dart';
 
@@ -35,6 +37,8 @@ class WorkoutBar extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RideStatRow(stats: stats),
+            const SizedBox(height: 12),
+            PowerFun(joules: rideJoules(rec.samples), title: 'This ride'),
             const SizedBox(height: 12),
             Text('Saves to history and exports as '
                 '${ref.read(rideFormatProvider).label} (change in Preferences).'),
