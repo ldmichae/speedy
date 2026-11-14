@@ -266,14 +266,8 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(ProviderScope(
         overrides: [rideHistoryStoreProvider.overrideWithValue(store)],
-        child: MaterialApp(
-          home: Scaffold(
-            appBar: AppBar(actions: const [HistoryButton()]),
-            body: const Text('HOME'),
-          ),
-        ),
+        child: const MaterialApp(home: HistoryScreen()),
       ));
-      await tester.tap(find.byTooltip('Ride history'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(title));
       await tester.pumpAndSettle();
@@ -297,7 +291,7 @@ void main() {
       expect(store.rides.keys, [ride(oldest).id]);
     });
 
-    testWidgets('goes home when it was the last ride', (tester) async {
+    testWidgets('returns to an empty history when it was the last ride', (tester) async {
       final store = storeWith([ride(newest)]);
       await openDetail(tester, store, 'Fri 13 Nov 2026 · 14:05');
 
@@ -307,8 +301,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(RideDetailScreen), findsNothing);
-      expect(find.byType(HistoryScreen), findsNothing);
-      expect(find.text('HOME'), findsOneWidget);
+      expect(find.byType(HistoryScreen), findsOneWidget);
+      expect(find.textContaining('No rides yet'), findsOneWidget);
       expect(store.rides, isEmpty);
     });
 

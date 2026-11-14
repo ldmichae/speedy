@@ -12,22 +12,6 @@ import 'recorder_controller.dart';
 import 'rider_profile_controller.dart';
 import 'units_controller.dart';
 
-/// App bar button that opens [PreferencesScreen].
-class PreferencesButton extends StatelessWidget {
-  const PreferencesButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Preferences',
-      icon: const Icon(Icons.settings_outlined),
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const PreferencesScreen()),
-      ),
-    );
-  }
-}
-
 /// Set-and-forget settings. Add a new setting as another [_Section].
 class PreferencesScreen extends ConsumerWidget {
   const PreferencesScreen({super.key});
@@ -109,7 +93,6 @@ class PreferencesScreen extends ConsumerWidget {
         ]);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Preferences')),
       body: SafeArea(
         child: LayoutBuilder(builder: (context, box) {
           final wide = isWideLayout(box.maxWidth);

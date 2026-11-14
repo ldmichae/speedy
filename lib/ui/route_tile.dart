@@ -6,7 +6,7 @@ import '../core/route.dart';
 import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
-import 'route_screen.dart';
+import 'navigation.dart';
 
 /// Dashboard tile: the route being ridden and the blue dot on it.
 class RouteMapTile extends ConsumerStatefulWidget {
@@ -67,9 +67,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
             const Text('No route selected'),
             const SizedBox(height: 8),
             FilledButton.tonal(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const RoutesScreen()),
-              ),
+              onPressed: () =>                  ref.read(pageProvider.notifier).state = AppPage.routes,
               child: const Text('Choose a route'),
             ),
           ]),

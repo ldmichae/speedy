@@ -10,6 +10,7 @@ import 'route_controller.dart';
 import 'route_map.dart';
 import 'route_screen.dart';
 import 'tour_controller.dart';
+import 'navigation.dart';
 import 'trainer_controller.dart';
 
 class ToursScreen extends ConsumerWidget {
@@ -61,7 +62,6 @@ class ToursScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tours = ref.watch(toursProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Tours')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _create(context, ref),
         icon: const Icon(Icons.add),
@@ -78,7 +78,7 @@ class ToursScreen extends ConsumerWidget {
                       'stages, with elevation loaded only when you need it.'),
                 ),
               )
-            : ListView(children: [
+            : ListView(padding: const EdgeInsets.only(top: 8, bottom: 88), children: [
                 for (final t in list)
                   ListTile(
                     leading: const Icon(Icons.hiking),
@@ -122,6 +122,7 @@ class TourScreen extends ConsumerWidget {
         .read(routeRunProvider.notifier)
         .start(tour, simulate: sim, stage: stage);
     Navigator.of(context).popUntil((r) => r.isFirst);
+    ref.read(pageProvider.notifier).state = AppPage.ride;
   }
 
   @override

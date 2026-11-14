@@ -10,22 +10,6 @@ import 'ride_chart.dart';
 import 'ride_history_provider.dart';
 import 'units_controller.dart';
 
-/// App bar button that opens [HistoryScreen].
-class HistoryButton extends StatelessWidget {
-  const HistoryButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Ride history',
-      icon: const Icon(Icons.history),
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const HistoryScreen()),
-      ),
-    );
-  }
-}
-
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
@@ -33,7 +17,6 @@ class HistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rides = ref.watch(rideHistoryProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Ride history')),
       body: SafeArea(
         child: LayoutBuilder(builder: (context, box) {
           final wide = isWideLayout(box.maxWidth);
@@ -171,19 +154,12 @@ class RideDetailScreen extends ConsumerWidget {
 
   final RideRecord ride;
 
-  /// After a delete: back to the list if other rides remain, else to home.
+  /// After a delete: back to the History page (its empty message shows if
+  /// that was the last ride).
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final navigator = Navigator.of(context);
     if (!await confirmAndDeleteRide(context, ref, ride)) return;
-    var others = true;
-    try {
-      others = (await ref.read(rideHistoryProvider.future)).isNotEmpty;
-    } catch (_) {} // can't tell: the list screen shows the error
-    if (others) {
-      navigator.pop();
-    } else {
-      navigator.popUntil((route) => route.isFirst);
-    }
+    navigator.pop();
   }
 
   @override

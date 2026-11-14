@@ -10,21 +10,8 @@ import '../devices/trainer.dart';
 import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
-import 'tour_screen.dart';
+import 'navigation.dart';
 import 'trainer_controller.dart';
-
-class RoutesButton extends StatelessWidget {
-  const RoutesButton({super.key});
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-        tooltip: 'Routes',
-        icon: const Icon(Icons.map_outlined),
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const RoutesScreen()),
-        ),
-      );
-}
 
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
@@ -42,14 +29,6 @@ class RoutesScreen extends ConsumerWidget {
     final connected = ref.watch(trainerControllerProvider
         .select((s) => s.status == TrainerStatus.connected));
     return Scaffold(
-      appBar: AppBar(title: const Text('Routes'), actions: [
-        TextButton.icon(
-          onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ToursScreen())),
-          icon: const Icon(Icons.hiking),
-          label: const Text('Tours'),
-        ),
-      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _draw(context, ref),
         icon: const Icon(Icons.add),
@@ -63,7 +42,7 @@ class RoutesScreen extends ConsumerWidget {
                     'and watch the dot move.'),
               ),
             )
-          : ListView(children: [
+          : ListView(padding: const EdgeInsets.only(top: 8, bottom: 88), children: [
               for (final r in routes)
                 ListTile(
                   leading: r.elevation == null
@@ -96,7 +75,7 @@ class RoutesScreen extends ConsumerWidget {
                                 ref
                                     .read(routeRunProvider.notifier)
                                     .start(r, simulate: true);
-                                Navigator.of(context).pop();
+                                ref.read(pageProvider.notifier).state = AppPage.ride;
                               }
                             : null,
                       ),
@@ -108,7 +87,7 @@ class RoutesScreen extends ConsumerWidget {
                       onPressed: connected
                           ? () {
                               ref.read(routeRunProvider.notifier).start(r);
-                              Navigator.of(context).pop();
+                              ref.read(pageProvider.notifier).state = AppPage.ride;
                             }
                           : null,
                     ),

@@ -8,6 +8,7 @@ import '../core/ride_recording.dart';
 import 'dashboard_grid.dart';
 import 'dashboard_layout_controller.dart';
 import 'layout.dart';
+import 'navigation.dart';
 import 'route_controller.dart';
 import 'plan_screen.dart';
 import 'recorder_controller.dart';
@@ -42,10 +43,12 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     super.dispose();
   }
 
-  /// Keys act only while this screen is on top, not under a dialog or another
-  /// screen such as Preferences.
+  /// Keys act only while this screen is on top: not under a dialog or a
+  /// pushed screen, and not while another page is open in the dock (the
+  /// dashboard stays alive behind it).
   VoidCallback _guarded(VoidCallback f) => () {
-        if (ModalRoute.of(context)?.isCurrent ?? true) f();
+        final onTop = ModalRoute.of(context)?.isCurrent ?? true;
+        if (onTop && ref.read(pageProvider) == AppPage.ride) f();
       };
 
   /// A plan owns the target while it runs.

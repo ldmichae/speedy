@@ -9,20 +9,8 @@ import 'format.dart';
 import 'layout.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
+import 'navigation.dart';
 import 'trainer_controller.dart';
-
-class PlansButton extends StatelessWidget {
-  const PlansButton({super.key});
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-        tooltip: 'Workout plans',
-        icon: const Icon(Icons.list_alt),
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const PlansScreen()),
-        ),
-      );
-}
 
 class PlansScreen extends ConsumerWidget {
   const PlansScreen({super.key});
@@ -41,7 +29,6 @@ class PlansScreen extends ConsumerWidget {
         .select((s) => s.status == TrainerStatus.connected));
     final ftp = ref.watch(ftpProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Workout plans')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(context, ref),
         icon: const Icon(Icons.add),
@@ -49,7 +36,7 @@ class PlansScreen extends ConsumerWidget {
       ),
       body: plans.isEmpty
           ? const Center(child: Text('No plans yet. Make one to ride in ERG.'))
-          : ListView(children: [
+          : ListView(padding: const EdgeInsets.only(top: 8, bottom: 88), children: [
               for (final p in plans)
                 ListTile(
                   leading: SizedBox(
@@ -81,7 +68,7 @@ class PlansScreen extends ConsumerWidget {
                       onPressed: connected && (!p.percent || ftp != null)
                           ? () {
                               ref.read(planRunProvider.notifier).start(p, ftp);
-                              Navigator.of(context).pop();
+                              ref.read(pageProvider.notifier).state = AppPage.ride;
                             }
                           : null,
                     ),

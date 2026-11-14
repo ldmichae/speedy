@@ -27,13 +27,11 @@ void main() {
       child: Consumer(
         builder: (context, ref, _) => MaterialApp(
           theme: ref.watch(paletteProvider).theme,
-          home: const Scaffold(appBar: null, body: Center(child: PreferencesButton())),
+          home: const PreferencesScreen(),
         ),
       ),
     ));
 
-    await tester.tap(find.byType(PreferencesButton));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Orange'));
     await tester.pumpAndSettle();
 

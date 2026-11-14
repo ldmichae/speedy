@@ -13,10 +13,9 @@ Future<ProviderContainer> openPreferences(WidgetTester tester) async {
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(
-      home: Scaffold(body: Center(child: PreferencesButton())),
+      home: PreferencesScreen(),
     ),
   ));
-  await tester.tap(find.byType(PreferencesButton));
   await tester.pumpAndSettle();
   return container;
 }
@@ -27,7 +26,6 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await openPreferences(tester);
 
-    expect(find.text('Preferences'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
     expect(find.text('Recording'), findsOneWidget);
     expect(find.text('Teal'), findsOneWidget);
