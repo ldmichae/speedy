@@ -80,19 +80,21 @@ class ToursScreen extends ConsumerWidget {
                       'stages, with elevation loaded only when you need it.'),
                 ),
               )
-            : ListView(padding: const EdgeInsets.only(top: 8, bottom: 88), children: [
-                for (final t in list)
-                  ListTile(
-                    leading: const Icon(Icons.hiking),
-                    title: Text(t.name),
-                    subtitle: Text('${t.stageCount} stages · '
-                        '${routeDistanceText(t.lengthMeters, ref.watch(rideUnitsProvider))} · '
-                        '${t.completed.length} done'),
-                    onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                            builder: (_) => TourScreen(tourId: t.id))),
-                  ),
-              ]),
+            : ListView(
+                padding: const EdgeInsets.only(top: 8, bottom: 88),
+                children: [
+                    for (final t in list)
+                      ListTile(
+                        leading: const Icon(Icons.hiking),
+                        title: Text(t.name),
+                        subtitle: Text('${t.stageCount} stages · '
+                            '${routeDistanceText(t.lengthMeters, ref.watch(rideUnitsProvider))} · '
+                            '${t.completed.length} done'),
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                                builder: (_) => TourScreen(tourId: t.id))),
+                      ),
+                  ]),
       ),
     );
   }
@@ -116,6 +118,25 @@ class TourScreen extends ConsumerWidget {
     ));
     if (stage == null) return;
     await ref.read(toursProvider.notifier).upsert(tour.withAddedStage(stage));
+  }
+
+  Future<void> _editStage(
+      BuildContext context, WidgetRef ref, Tour tour, int i) async {
+    final old = tour.stages[i];
+    final stage =
+        await Navigator.of(context).push<SavedRoute>(MaterialPageRoute(
+      builder: (_) => RouteEditor(
+        title: 'Edit stage ${i + 1}',
+        initialName: old.name,
+        initial: old,
+        fetchElevationOnSave: false,
+      ),
+    ));
+    if (stage == null) return;
+    // Read the tour again: it may have changed while the editor was open.
+    final now = ref.read(toursProvider.notifier).byId(tour.id);
+    if (now == null || i >= now.stageCount) return;
+    await ref.read(toursProvider.notifier).upsert(now.withStage(i, stage));
   }
 
   void _ride(
@@ -221,6 +242,7 @@ class TourScreen extends ConsumerWidget {
             connected: connected,
             units: ref.watch(rideUnitsProvider),
             onLoad: () => loader.load(tour.id, i),
+            onEdit: () => _editStage(context, ref, tour, i),
             onRide: (sim) => _ride(context, ref, tour, i, sim),
             onDelete: tour.stageCount == 1
                 ? null
@@ -242,6 +264,7 @@ class _StageTile extends ConsumerWidget {
     required this.connected,
     required this.units,
     required this.onLoad,
+    required this.onEdit,
     required this.onRide,
     required this.onDelete,
   });
@@ -253,6 +276,7 @@ class _StageTile extends ConsumerWidget {
   final bool connected;
   final UnitSystem units;
   final VoidCallback onLoad;
+  final VoidCallback onEdit;
   final void Function(bool simulate) onRide;
   final VoidCallback? onDelete;
 
@@ -286,6 +310,11 @@ class _StageTile extends ConsumerWidget {
             onPressed: (load?.loading ?? false) ? null : onLoad,
             child: Text(load?.message != null ? 'Retry' : 'Load elevation'),
           ),
+        IconButton(
+          tooltip: 'Edit stage',
+          icon: const Icon(Icons.edit_outlined),
+          onPressed: onEdit,
+        ),
         IconButton(
           tooltip: connected
               ? 'Ride from this stage in ERG (starts recording)'

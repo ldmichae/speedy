@@ -18,6 +18,15 @@ import 'units_controller.dart';
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
 
+  Future<void> _edit(BuildContext context, WidgetRef ref, SavedRoute r) async {
+    final edited = await Navigator.of(context).push<SavedRoute>(
+      MaterialPageRoute(
+          builder: (_) => RouteEditor(
+              title: 'Edit route', initialName: r.name, initial: r)),
+    );
+    if (edited != null) ref.read(routesProvider.notifier).replace(r, edited);
+  }
+
   Future<void> _draw(BuildContext context, WidgetRef ref) async {
     final route = await Navigator.of(context).push<SavedRoute>(
       MaterialPageRoute(builder: (_) => const RouteEditor()),
@@ -44,58 +53,68 @@ class RoutesScreen extends ConsumerWidget {
                     'and watch the dot move.'),
               ),
             )
-          : ListView(padding: const EdgeInsets.only(top: 8, bottom: 88), children: [
-              for (final r in routes)
-                ListTile(
-                  leading: r.elevation == null
-                      ? const Icon(Icons.route)
-                      : SizedBox(
-                          width: 96,
-                          child: ElevationChart(
-                              profile: r.elevation!, height: 48)),
-                  title: Text(r.name),
-                  subtitle: Text(routeDistanceText(r.lengthMeters, ref.watch(rideUnitsProvider)) +
-                      (r.elevation == null
-                          ? ''
-                          : ' · ↑ ${elevationText(r.elevation!.climb, ref.watch(rideUnitsProvider))}')),
-                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                    IconButton(
-                      tooltip: 'Delete',
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () =>
-                          ref.read(routesProvider.notifier).delete(r),
+          : ListView(
+              padding: const EdgeInsets.only(top: 8, bottom: 88),
+              children: [
+                  for (final r in routes)
+                    ListTile(
+                      leading: r.elevation == null
+                          ? const Icon(Icons.route)
+                          : SizedBox(
+                              width: 96,
+                              child: ElevationChart(
+                                  profile: r.elevation!, height: 48)),
+                      title: Text(r.name),
+                      subtitle: Text(routeDistanceText(
+                              r.lengthMeters, ref.watch(rideUnitsProvider)) +
+                          (r.elevation == null
+                              ? ''
+                              : ' · ↑ ${elevationText(r.elevation!.climb, ref.watch(rideUnitsProvider))}')),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'Edit',
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => _edit(context, ref, r),
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () =>
+                              ref.read(routesProvider.notifier).delete(r),
+                        ),
+                        if (r.elevation != null)
+                          IconButton.filledTonal(
+                            tooltip: connected
+                                ? 'Ride with simulated climbs: the trainer '
+                                    'follows the road grade'
+                                : 'Connect a trainer to ride',
+                            icon: const Icon(Icons.terrain),
+                            onPressed: connected
+                                ? () {
+                                    ref
+                                        .read(routeRunProvider.notifier)
+                                        .start(r, simulate: true);
+                                    ref.read(pageProvider.notifier).state =
+                                        AppPage.ride;
+                                  }
+                                : null,
+                          ),
+                        IconButton.filled(
+                          tooltip: connected
+                              ? 'Ride this route in ERG (starts recording)'
+                              : 'Connect a trainer to ride',
+                          icon: const Icon(Icons.play_arrow),
+                          onPressed: connected
+                              ? () {
+                                  ref.read(routeRunProvider.notifier).start(r);
+                                  ref.read(pageProvider.notifier).state =
+                                      AppPage.ride;
+                                }
+                              : null,
+                        ),
+                      ]),
                     ),
-                    if (r.elevation != null)
-                      IconButton.filledTonal(
-                        tooltip: connected
-                            ? 'Ride with simulated climbs: the trainer '
-                                'follows the road grade'
-                            : 'Connect a trainer to ride',
-                        icon: const Icon(Icons.terrain),
-                        onPressed: connected
-                            ? () {
-                                ref
-                                    .read(routeRunProvider.notifier)
-                                    .start(r, simulate: true);
-                                ref.read(pageProvider.notifier).state = AppPage.ride;
-                              }
-                            : null,
-                      ),
-                    IconButton.filled(
-                      tooltip: connected
-                          ? 'Ride this route in ERG (starts recording)'
-                          : 'Connect a trainer to ride',
-                      icon: const Icon(Icons.play_arrow),
-                      onPressed: connected
-                          ? () {
-                              ref.read(routeRunProvider.notifier).start(r);
-                              ref.read(pageProvider.notifier).state = AppPage.ride;
-                            }
-                          : null,
-                    ),
-                  ]),
-                ),
-            ]),
+                ]),
     );
   }
 }
@@ -117,10 +136,15 @@ class RouteEditor extends ConsumerStatefulWidget {
     this.initialName = '',
     this.startAt,
     this.fetchElevationOnSave = true,
+    this.initial,
   });
 
   final String title;
   final String initialName;
+
+  /// Edits this route: its waypoints are placed and its legs re-snapped. Until
+  /// a point is added, undone or cleared, the saved path and elevation stand.
+  final SavedRoute? initial;
 
   /// Pre-places the first point (a tour stage continues where the last ended).
   final LatLng? startAt;
@@ -141,32 +165,52 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
   @override
   void initState() {
     super.initState();
-    if (widget.startAt != null) _points.add(widget.startAt!);
+    final r = widget.initial;
+    if (r != null) {
+      _points.addAll(r.waypoints);
+      _elevation = r.elevation;
+      for (var i = 1; i < _points.length; i++) {
+        final leg = _Leg(_points[i - 1], _points[i]);
+        _legs.add(leg);
+        _snap(leg);
+      }
+    } else if (widget.startAt != null) {
+      _points.add(widget.startAt!);
+    }
   }
+
+  /// False while an edited route is still exactly as saved.
+  bool _dirty = false;
 
   ElevationProfile? _elevation;
   bool _elevLoading = false;
   String? _elevError;
 
-  bool get _loading => _legs.any((l) => l.path == null);
-  bool get _anyStraight => _legs.any((l) => !l.snapped);
-  List<LatLng> get _path => [
-        for (final (i, l) in _legs.indexed)
-          ...(l.path ?? [l.from, l.to]).skip(i == 0 ? 0 : 1),
-      ];
+  bool get _loading => _dirty && _legs.any((l) => l.path == null);
+  bool get _anyStraight => _dirty && _legs.any((l) => !l.snapped);
+  List<LatLng> get _path => !_dirty && widget.initial != null
+      ? widget.initial!.path
+      : [
+          for (final (i, l) in _legs.indexed)
+            ...(l.path ?? [l.from, l.to]).skip(i == 0 ? 0 : 1),
+        ];
 
   Future<void> _add(LatLng p) async {
     setState(() {
+      _dirty = true;
       _elevation = null;
       _points.add(p);
       if (_points.length > 1) _legs.add(_Leg(_points[_points.length - 2], p));
     });
     if (_legs.isEmpty) return;
-    final leg = _legs.last;
+    await _snap(_legs.last);
+  }
+
+  Future<void> _snap(_Leg leg) async {
     final profile = ref.read(roadProfileProvider);
-    final (path, ok) =
-        await snapOrStraight(ref.read(routeSnapperProvider), leg.from, leg.to,
-            profile: profile);
+    final (path, ok) = await snapOrStraight(
+        ref.read(routeSnapperProvider), leg.from, leg.to,
+        profile: profile);
     if (!mounted || !_legs.contains(leg)) return; // undone meanwhile
     setState(() {
       leg.path = path;
@@ -176,12 +220,14 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
 
   void _undo() => setState(() {
         if (_points.isEmpty) return;
+        _dirty = true;
         _elevation = null;
         _points.removeLast();
         if (_legs.isNotEmpty) _legs.removeLast();
       });
 
   void _clear() => setState(() {
+        _dirty = true;
         _elevation = null;
         _points.clear();
         _legs.clear();
@@ -246,11 +292,13 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
         Expanded(
           child: FlutterMap(
             options: MapOptions(
-              initialCenter: widget.startAt ??
+              initialCenter: widget.initial?.path.first ??
+                  widget.startAt ??
                   ref.read(routesProvider).lastOrNull?.path.first ??
                   const LatLng(48, 10),
               initialZoom:
-                  widget.startAt != null || ref.read(routesProvider).isNotEmpty
+                  widget.initial != null ||
+                      widget.startAt != null || ref.read(routesProvider).isNotEmpty
                       ? 13
                       : 4,
               minZoom: minMapZoom,
@@ -313,7 +361,10 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(_loading ? 'Snapping…' : routeDistanceText(length, ref.watch(rideUnitsProvider)),
+              Text(
+                  _loading
+                      ? 'Snapping…'
+                      : routeDistanceText(length, ref.watch(rideUnitsProvider)),
                   style: Theme.of(context).textTheme.titleMedium),
               IconButton(
                 tooltip: 'Undo last point',

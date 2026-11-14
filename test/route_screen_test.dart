@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/ride_stats.dart';
+import 'package:indoor_cycling/core/elevation.dart';
 import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/ui/elevation_chart.dart';
@@ -24,7 +25,9 @@ class _Blank extends TileProvider {
 
 class _Straight implements RouteSnapper {
   @override
-  Future<List<LatLng>> snap(LatLng a, LatLng b, {RoadProfile profile = RoadProfile.car}) async => [a, b];
+  Future<List<LatLng>> snap(LatLng a, LatLng b,
+          {RoadProfile profile = RoadProfile.car}) async =>
+      [a, b];
 }
 
 class _Hills extends ElevationSource {
@@ -42,6 +45,7 @@ final _meters = StateProvider<double>((ref) => 0);
 
 void main() {
   elevationEditorTests();
+  editRouteTests();
   Widget app(Widget child) => ProviderScope(
         overrides: [
           tileProviderProvider.overrideWithValue(_Blank()),
@@ -52,7 +56,9 @@ void main() {
               avgPower: null,
               kcal: null)),
         ],
-        child: MaterialApp(home: Scaffold(body: SizedBox(width: 500, height: 700, child: child))),
+        child: MaterialApp(
+            home: Scaffold(
+                body: SizedBox(width: 500, height: 700, child: child))),
       );
 
   testWidgets('tapping the map adds points, snaps and enables Save', (t) async {
@@ -74,7 +80,9 @@ void main() {
     await t.pump();
     expect(find.text('Snapping…'), findsNothing);
     expect(find.textContaining('km'), findsOneWidget);
-    expect(t.widget<TextButton>(find.widgetWithText(TextButton, 'Save')).onPressed, isNotNull);
+    expect(
+        t.widget<TextButton>(find.widgetWithText(TextButton, 'Save')).onPressed,
+        isNotNull);
     expect(find.text('2'), findsOneWidget); // second marker
   });
 
@@ -86,11 +94,8 @@ void main() {
     final c = ProviderScope.containerOf(t.element(find.byType(RouteMapTile)));
     c.read(routeRunProvider.notifier).start(_route);
     await t.pump();
-    LatLng dot() => t
-        .widget<MarkerLayer>(find.byType(MarkerLayer))
-        .markers
-        .single
-        .point;
+    LatLng dot() =>
+        t.widget<MarkerLayer>(find.byType(MarkerLayer)).markers.single.point;
     expect(dot().latitude, closeTo(0, 1e-9));
 
     c.read(_meters.notifier).state = _route.lengthMeters / 2;
@@ -109,7 +114,8 @@ void main() {
 }
 
 void elevationEditorTests() {
-  testWidgets('the editor shows elevation on request and saves it with the route',
+  testWidgets(
+      'the editor shows elevation on request and saves it with the route',
       (t) async {
     t.view.physicalSize = const Size(500, 900);
     t.view.devicePixelRatio = 1;
@@ -126,7 +132,8 @@ void elevationEditorTests() {
           builder: (context) => Scaffold(
             body: TextButton(
               onPressed: () async => saved = await Navigator.of(context).push(
-                  MaterialPageRoute<SavedRoute>(builder: (_) => const RouteEditor())),
+                  MaterialPageRoute<SavedRoute>(
+                      builder: (_) => const RouteEditor())),
               child: const Text('open'),
             ),
           ),
@@ -150,5 +157,53 @@ void elevationEditorTests() {
     await t.tap(find.text('Save'));
     await t.pumpAndSettle();
     expect(saved?.elevation, isNotNull);
+  });
+}
+
+void editRouteTests() {
+  testWidgets(
+      'editing a route starts from its points; a rename keeps path and elevation',
+      (t) async {
+    t.view.physicalSize = const Size(500, 900);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final a = const LatLng(0, 0),
+        b = const LatLng(0, 0.01),
+        mid = const LatLng(0, 0.005);
+    final original = SavedRoute('Loop', [a, b], [a, mid, b],
+        elevation: ElevationProfile.fromSamples(
+            [0.0, 500.0, 1000.0], [1.0, 2.0, 3.0]));
+    SavedRoute? saved;
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        tileProviderProvider.overrideWithValue(_Blank()),
+        routeSnapperProvider.overrideWithValue(_Straight()),
+      ],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async => saved = await Navigator.of(context).push(
+                  MaterialPageRoute<SavedRoute>(
+                      builder: (_) => RouteEditor(
+                          initialName: original.name, initial: original))),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    expect(find.text('2'), findsOneWidget); // both waypoints are placed
+
+    await t.enterText(find.byType(TextField).first, 'Renamed');
+    await t.tap(find.text('Save'));
+    await t.pumpAndSettle();
+    expect(saved?.name, 'Renamed');
+    expect(saved?.waypoints, original.waypoints);
+    expect(saved?.elevation, isNotNull);
+    expect(saved?.path.first, a);
+    expect(saved?.path.last, b);
   });
 }

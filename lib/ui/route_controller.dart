@@ -67,6 +67,9 @@ class RoutesController extends PersistedNotifier<List<SavedRoute>> {
   void add(SavedRoute r) => put([...state, r]);
 
   void delete(SavedRoute r) => put([...state]..remove(r));
+
+  void replace(SavedRoute old, SavedRoute r) =>
+      put([for (final x in state) identical(x, old) ? r : x]);
 }
 
 /// A course being ridden (one route, or a tour). [origin] is the ride
@@ -215,7 +218,8 @@ final routeProgressProvider = Provider<RouteProgress?>((ref) {
 
 /// Which roads new route segments may use. Remembered between sessions.
 final roadProfileProvider =
-    NotifierProvider<RoadProfileController, RoadProfile>(RoadProfileController.new);
+    NotifierProvider<RoadProfileController, RoadProfile>(
+        RoadProfileController.new);
 
 class RoadProfileController extends PersistedNotifier<RoadProfile> {
   static const _key = 'roadProfile';
@@ -230,7 +234,8 @@ class RoadProfileController extends PersistedNotifier<RoadProfile> {
   }
 
   @override
-  Future<void> write(SharedPreferences p, RoadProfile v) => p.setString(_key, v.name);
+  Future<void> write(SharedPreferences p, RoadProfile v) =>
+      p.setString(_key, v.name);
 
   void set(RoadProfile v) => put(v);
 }
