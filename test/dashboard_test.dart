@@ -795,7 +795,8 @@ void main() {
       await startEditing(tester);
       c.read(dashboardLayoutProvider.notifier)
         ..add(TileKind.powerNow)
-        ..add(TileKind.time);
+        ..add(TileKind.time)
+        ..add(TileKind.route);
       await tester.pump();
 
       final menu = tester.widget<PopupMenuButton<TileKind>>(

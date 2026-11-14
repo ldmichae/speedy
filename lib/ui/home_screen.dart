@@ -7,6 +7,7 @@ import 'dashboard_view.dart';
 import 'history_screen.dart';
 import 'layout.dart';
 import 'plan_screen.dart';
+import 'route_screen.dart';
 import 'preferences_screen.dart';
 import 'trainer_controller.dart';
 
@@ -20,7 +21,7 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Indoor Cycling'),
-        actions: const [PlansButton(), HistoryButton(), PreferencesButton()],
+        actions: const [RoutesButton(), PlansButton(), HistoryButton(), PreferencesButton()],
       ),
       body: SafeArea(
         child: Center(

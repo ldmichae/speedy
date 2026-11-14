@@ -96,14 +96,7 @@ class PlanRunner extends Notifier<PlanRun?> {
   /// Starts recording (or resumes it) and rides [plan]; [ftp] is needed for
   /// a percent plan.
   void start(Plan plan, int? ftp) {
-    final rec = ref.read(recorderProvider.notifier);
-    switch (ref.read(recorderProvider).status) {
-      case RecStatus.idle:
-        rec.start();
-      case RecStatus.paused:
-        rec.resume();
-      case RecStatus.recording:
-    }
+    ref.read(recorderProvider.notifier).startOrResume();
     _applied = null;
     state = PlanRun(plan.name, plan.resolve(ftp),
         ref.read(recorderProvider).elapsed.inSeconds, 0);

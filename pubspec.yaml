@@ -9,8 +9,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_map: ^8.3.2
   flutter_riverpod: ^2.6.1
   # Pin to the version pub resolves once it works for you.
+  http: ^1.6.0
+  latlong2: ^0.10.1
   path_provider: ^2.1.6
   shared_preferences: ^2.5.6
   universal_ble: any

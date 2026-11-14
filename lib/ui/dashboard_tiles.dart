@@ -9,6 +9,7 @@ import 'format.dart';
 import '../core/plan.dart';
 import 'metric_tile.dart';
 import 'plan_controller.dart';
+import 'route_tile.dart';
 import 'recorder_controller.dart';
 import 'ride_chart.dart';
 import 'rider_profile_controller.dart';
@@ -94,6 +95,8 @@ class DashboardTile extends ConsumerWidget {
         return const _ErgTile();
       case TileKind.chart:
         return const _ChartTile();
+      case TileKind.route:
+        return const RouteMapTile();
     }
   }
 }

@@ -99,6 +99,17 @@ class RecorderController extends Notifier<RecordingState> {
     _publish();
   }
 
+  /// Starts a ride, or resumes a paused one; no-op while recording.
+  void startOrResume() {
+    switch (_recording.status) {
+      case RecStatus.idle:
+        start();
+      case RecStatus.paused:
+        resume();
+      case RecStatus.recording:
+    }
+  }
+
   void pause() {
     _recording.pause(_clock.elapsed);
     _publish();

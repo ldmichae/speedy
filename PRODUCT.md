@@ -28,7 +28,8 @@ Flutter app (Riverpod, universal_ble). A simulated trainer allows hardware-free 
 - Recording, ride history, export, rider profile, unit preferences
 - Rearrangeable dashboard layout (in progress)
 - Domain terms live in GLOSSARY.md (not yet written); issues in GitHub ldmichae/speedy
-- Undecided: structured workouts, world sim, accounts/sync (none planned)
+- Workout plans (ERG, FTP, ramps, repeats) and drawn routes on an OpenStreetMap map (a position dot, not a ride sim)
+- Undecided: world sim, accounts/sync (none planned)
 
 ## Evidence on Hand
 

@@ -115,7 +115,7 @@ void main() {
 
     test('elapsed time is not duplicated: the Record bar owns it', () {
       expect(allKinds(standard), isNot(contains(TileKind.time)));
-      expect(standard.unplaced, [TileKind.powerNow, TileKind.time]);
+      expect(standard.unplaced, [TileKind.powerNow, TileKind.time, TileKind.route]);
     });
 
     test('before recording: only the left side has anything to show', () {
@@ -372,13 +372,13 @@ void main() {
       final l = standard.showInstead(TileKind.cadence, TileKind.powerNow);
       expect(allKinds(l), contains(TileKind.powerNow));
       expect(allKinds(l), isNot(contains(TileKind.cadence)));
-      expect(l.unplaced, [TileKind.cadence, TileKind.time]);
+      expect(l.unplaced, [TileKind.cadence, TileKind.time, TileKind.route]);
     });
 
     test('remove and add', () {
       var l = standard.remove(TileKind.speed);
       expect(allKinds(l), isNot(contains(TileKind.speed)));
-      expect(l.unplaced, [TileKind.powerNow, TileKind.speed, TileKind.time]);
+      expect(l.unplaced, [TileKind.powerNow, TileKind.speed, TileKind.time, TileKind.route]);
 
       l = l.add(TileKind.speed);
       expect(l.sideOf(TileKind.speed), isNotNull);

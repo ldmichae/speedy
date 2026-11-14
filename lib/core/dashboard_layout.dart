@@ -12,7 +12,8 @@ enum TileKind {
   avgPower('Avg power', rideOnly: true),
   energy('Energy', rideOnly: true),
   ergTarget('ERG target', span: 3, rows: 2, minSpan: 2, minRows: 2),
-  chart('Chart', span: 3, rows: 4, minSpan: 2, minRows: 3, rideOnly: true);
+  chart('Chart', span: 3, rows: 4, minSpan: 2, minRows: 3, rideOnly: true),
+  route('Route map', span: 3, rows: 4, minSpan: 2, minRows: 3, rideOnly: true);
 
   const TileKind(
     this.label, {
