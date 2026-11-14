@@ -77,7 +77,12 @@ class RideChart extends StatefulWidget {
     required this.samples,
     required this.settings,
     this.units = UnitSystem.metric,
+    this.planned,
   });
+
+  /// Corner points (seconds, watts) of the plan being ridden, drawn on the
+  /// watts axis.
+  final List<(double, double)>? planned;
 
   final List<RideSample> samples;
   final ChartSettings settings;
@@ -112,6 +117,7 @@ class _RideChartState extends State<RideChart> {
             gridColor: scheme.outlineVariant,
             textColor: scheme.onSurfaceVariant,
             system: widget.units,
+            planned: widget.planned,
             hoverX: _hoverX,
             tooltipColor: scheme.surfaceContainerHighest,
             tooltipTextColor: scheme.onSurface,
@@ -165,6 +171,7 @@ class _RideChartPainter extends CustomPainter {
     required this.gridColor,
     required this.textColor,
     required this.system,
+    required this.planned,
     required this.hoverX,
     required this.tooltipColor,
     required this.tooltipTextColor,
@@ -176,6 +183,7 @@ class _RideChartPainter extends CustomPainter {
   final Color gridColor;
   final Color textColor;
   final UnitSystem system;
+  final List<(double, double)>? planned;
   final double? hoverX;
   final Color tooltipColor;
   final Color tooltipTextColor;
@@ -197,7 +205,8 @@ class _RideChartPainter extends CustomPainter {
       x0 = x1 - window!.inSeconds;
     } else {
       x0 = 0;
-      x1 = math.max(tEnd, 60);
+      // Whole-ride view also shows the rest of the plan.
+      x1 = math.max(math.max(tEnd, 60), planned?.last.$1 ?? 0);
     }
     final visible = samples.where((s) => s.t >= x0).toList();
 
@@ -213,6 +222,11 @@ class _RideChartPainter extends CustomPainter {
         for (final s in visible) {
           final v = m.valueOf(s, system);
           if (v != null && v > peak) peak = v;
+        }
+      }
+      if (u == 'W') {
+        for (final (_, w) in planned ?? const <(double, double)>[]) {
+          if (w > peak) peak = w;
         }
       }
       axisMax[u] = _niceMax(peak);
@@ -258,6 +272,21 @@ class _RideChartPainter extends CustomPainter {
 
     canvas.save();
     canvas.clipRect(plot.inflate(2));
+    if (planned != null && axisMax.containsKey('W')) {
+      final path = Path();
+      for (final (i, (t, w)) in planned!.indexed) {
+        final x = plot.left + plot.width * (t - x0) / span;
+        final y = plot.bottom - plot.height * (w / axisMax['W']!).clamp(0.0, 1.0);
+        i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+      }
+      canvas.drawPath(
+          path,
+          Paint()
+            ..color = RideMetric.target.color.withValues(alpha: 0.45)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 6
+            ..strokeJoin = StrokeJoin.round);
+    }
     for (final m in metrics.reversed) {
       // Reversed so the first-listed metrics (target) end up on top.
       final max = axisMax[m.unitIn(system)]!;

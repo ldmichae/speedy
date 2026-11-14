@@ -8,6 +8,7 @@ import '../core/ride_recording.dart';
 import 'dashboard_grid.dart';
 import 'dashboard_layout_controller.dart';
 import 'layout.dart';
+import 'plan_screen.dart';
 import 'recorder_controller.dart';
 import 'recording_panel.dart';
 import 'trainer_controller.dart';
@@ -122,6 +123,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       // Controls and tiles read as one workout: outlined together while a
       // ride is being recorded.
       final workout = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const PlanBar(),
         const WorkoutBar(),
         const SizedBox(height: 12),
         DashboardGrid(editing: _editing, compact: compact),

@@ -6,7 +6,9 @@ import '../core/ride_stats.dart';
 import '../core/target_status.dart';
 import '../core/units.dart';
 import 'format.dart';
+import '../core/plan.dart';
 import 'metric_tile.dart';
+import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'ride_chart.dart';
 import 'rider_profile_controller.dart';
@@ -327,6 +329,7 @@ class _ChartTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rec = ref.watch(recorderProvider);
     final settings = ref.watch(chartSettingsProvider);
+    final run = ref.watch(planRunProvider);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -339,6 +342,7 @@ class _ChartTile extends ConsumerWidget {
                 samples: rec.samples,
                 settings: settings,
                 units: ref.watch(rideUnitsProvider),
+                planned: run?.steps.outline(run.origin.toDouble()),
               ),
             ),
             const SizedBox(height: 8),

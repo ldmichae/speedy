@@ -6,6 +6,7 @@ import '../core/rider_profile.dart';
 import '../core/units.dart';
 import 'app_palette.dart';
 import 'layout.dart';
+import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'rider_profile_controller.dart';
 import 'units_controller.dart';
@@ -84,6 +85,13 @@ class PreferencesScreen extends ConsumerWidget {
       child: _RiderProfileForm(),
     );
 
+    const training = _Section(
+      title: 'Training',
+      description: 'Your FTP, in watts. Workout plans can set steps as a '
+          'percent of it.',
+      child: _FtpField(),
+    );
+
     Widget stack(List<Widget> sections) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -107,12 +115,12 @@ class PreferencesScreen extends ConsumerWidget {
                   if (wide)
                     // Short settings on the left, the longer profile form on the right.
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: stack([appearance, recording])),
+                      Expanded(child: stack([appearance, recording, training])),
                       const SizedBox(width: 24),
                       Expanded(child: stack([units, profile])),
                     ])
                   else
-                    stack([appearance, recording, units, profile]),
+                    stack([appearance, recording, training, units, profile]),
                 ],
               ),
             ),
@@ -123,6 +131,46 @@ class PreferencesScreen extends ConsumerWidget {
   }
 }
 
+
+class _FtpField extends ConsumerStatefulWidget {
+  const _FtpField();
+
+  @override
+  ConsumerState<_FtpField> createState() => _FtpFieldState();
+}
+
+class _FtpFieldState extends ConsumerState<_FtpField> {
+  late final _c = TextEditingController(
+      text: ref.read(ftpProvider)?.toString() ?? '');
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (lo, hi) = FtpController.range;
+    final v = int.tryParse(_c.text);
+    final ok = v != null && v >= lo && v <= hi;
+    return TextField(
+      key: const Key('ftp'),
+      controller: _c,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        labelText: 'FTP',
+        suffixText: 'W',
+        errorText: _c.text.isEmpty || ok ? null : 'Enter $lo–$hi',
+        border: const OutlineInputBorder(),
+      ),
+      onChanged: (_) {
+        ref.read(ftpProvider.notifier).set(ok ? v : null);
+        setState(() {});
+      },
+    );
+  }
+}
 
 class _UnitsPicker extends StatelessWidget {
   const _UnitsPicker({
