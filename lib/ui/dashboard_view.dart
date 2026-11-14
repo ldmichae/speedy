@@ -7,7 +7,9 @@ import '../core/dashboard_layout.dart';
 import '../core/ride_recording.dart';
 import 'dashboard_grid.dart';
 import 'dashboard_layout_controller.dart';
+import 'focus_views.dart';
 import 'layout.dart';
+import 'ride_view_controller.dart';
 import 'navigation.dart';
 import 'route_controller.dart';
 import 'plan_screen.dart';
@@ -98,6 +100,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     final deviceName = ref.watch(trainerControllerProvider.select((s) => s.deviceName));
     final error = ref.watch(trainerControllerProvider.select((s) => s.error));
     final theme = Theme.of(context);
+    final view = ref.watch(rideViewProvider);
     final active = ref.watch(
         recorderProvider.select((r) => r.status != RecStatus.idle));
 
@@ -136,7 +139,10 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         const PlanBar(),
         const WorkoutBar(),
         const SizedBox(height: 12),
-        DashboardGrid(editing: _editing, compact: compact),
+        DashboardGrid(
+            editing: _editing,
+            compact: compact,
+            hidden: view == RideView.dashboard ? const {} : focusTiles),
       ]);
 
       final content = ListView(
@@ -144,6 +150,21 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         children: [
           deviceRow,
           const SizedBox(height: 12),
+          SegmentedButton<RideView>(
+            showSelectedIcon: false,
+            segments: [
+              for (final v in RideView.values)
+                ButtonSegment(value: v, label: Text(v.label)),
+            ],
+            selected: {view},
+            onSelectionChanged: (s) =>
+                ref.read(rideViewProvider.notifier).set(s.first),
+          ),
+          const SizedBox(height: 12),
+          if (view != RideView.dashboard) ...[
+            if (view == RideView.map) const MapFocus() else const ChartFocus(),
+            const SizedBox(height: 12),
+          ],
           if (_editing) ...[
             _EditToolbar(onDone: () => setState(() => _editing = false)),
             const SizedBox(height: 12),

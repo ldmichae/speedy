@@ -10,9 +10,15 @@ import 'route_map.dart';
 import 'units_controller.dart';
 import 'navigation.dart';
 
+enum MapElevation { below, overlay, none }
+
 /// Dashboard tile: the route being ridden and the blue dot on it.
 class RouteMapTile extends ConsumerStatefulWidget {
-  const RouteMapTile({super.key});
+  const RouteMapTile({super.key, this.elevation = MapElevation.below});
+
+  /// Where the elevation profile goes: under the map, over its bottom edge, or
+  /// not at all.
+  final MapElevation elevation;
 
   static String label(RouteProgress p, UnitSystem u) {
     final c = p.course;
@@ -39,6 +45,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
   bool _follow = true;
 
   static const _followZoom = 15.0;
+  static const _overlayHeight = 64.0;
 
   void _fit(SavedRoute r) {
     if (!_ready) return;
@@ -78,6 +85,12 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
     }
 
     final r = progress.course.stage(progress.stage); // the stage being ridden
+    final profile = r.elevation == null || widget.elevation == MapElevation.none
+        ? null
+        : ElevationChart(
+            profile: r.elevation!,
+            height: _overlayHeight,
+            riderMeters: progress.stageMeters);
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -99,7 +112,12 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
                 },
               ),
               children: [
-                ...mapBaseLayers(ref, panBuffer: 0),
+                ...mapBaseLayers(ref,
+                    panBuffer: 0,
+                    bottomInset: profile != null &&
+                            widget.elevation == MapElevation.overlay
+                        ? _overlayHeight
+                        : 0),
                 PolylineLayer(polylines: [routeLine(r.path)]),
                 MarkerLayer(markers: [riderMarker(progress.position)]),
               ],
@@ -143,15 +161,27 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
                 ),
               ]),
             ),
+            // Flush with the map's bottom and side edges; the credits are
+            // lifted above it (see mapBaseLayers' bottomInset).
+            if (profile != null && widget.elevation == MapElevation.overlay)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ColoredBox(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surface
+                      .withValues(alpha: 0.85),
+                  child: profile,
+                ),
+              ),
           ]),
         ),
-        if (r.elevation != null)
+        if (profile != null && widget.elevation == MapElevation.below)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-            child: ElevationChart(
-                profile: r.elevation!,
-                height: 64,
-                riderMeters: progress.stageMeters),
+            child: profile,
           ),
       ]),
     );

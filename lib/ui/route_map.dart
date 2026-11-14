@@ -36,7 +36,12 @@ final tileProviderProvider = Provider<TileProvider>((ref) {
 /// Tiles plus the attribution OSM and the FOSSGIS router require.
 /// [panBuffer] is how many extra rings of tiles to load around the view:
 /// 0 where the map barely moves (the ride tile), 1 where you pan (the editor).
-List<Widget> mapBaseLayers(WidgetRef ref, {int panBuffer = 1}) => [
+///
+/// [bottomInset] lifts the credits clear of something laid over the map's
+/// bottom edge.
+List<Widget> mapBaseLayers(WidgetRef ref,
+        {int panBuffer = 1, double bottomInset = 0}) =>
+    [
       TileLayer(
         urlTemplate: tileUrlTemplate,
         userAgentPackageName: 'indoor_cycling',
@@ -46,15 +51,20 @@ List<Widget> mapBaseLayers(WidgetRef ref, {int panBuffer = 1}) => [
       ),
       // OSM's policy: the credit must be visible on the map, not behind a
       // toggle. The other credits can live in the expandable box.
-      const _OsmCredit(),
-      const RichAttributionWidget(
-        alignment: AttributionAlignment.bottomLeft,
-        showFlutterMapAttribution: false,
-        attributions: [
-          TextSourceAttribution('© OpenStreetMap contributors'),
-          TextSourceAttribution('Routing: FOSSGIS OSRM'),
-          TextSourceAttribution('Elevation: AWS Terrain Tiles, Open-Meteo'),
-        ],
+      Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: const _OsmCredit()),
+      Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: const RichAttributionWidget(
+          alignment: AttributionAlignment.bottomLeft,
+          showFlutterMapAttribution: false,
+          attributions: [
+            TextSourceAttribution('© OpenStreetMap contributors'),
+            TextSourceAttribution('Routing: FOSSGIS OSRM'),
+            TextSourceAttribution('Elevation: AWS Terrain Tiles, Open-Meteo'),
+          ],
+        ),
       ),
     ];
 
