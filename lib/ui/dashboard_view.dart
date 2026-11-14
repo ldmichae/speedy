@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import '../core/units.dart';
+import '../core/dashboard_layout.dart';
 import '../core/ride_recording.dart';
+import 'dashboard_grid.dart';
+import 'dashboard_layout_controller.dart';
 import 'layout.dart';
-import 'metric_tile.dart';
 import 'recorder_controller.dart';
 import 'recording_panel.dart';
 import 'trainer_controller.dart';
-import 'units_controller.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
@@ -19,6 +19,8 @@ class DashboardView extends ConsumerStatefulWidget {
 }
 
 class _DashboardViewState extends ConsumerState<DashboardView> {
+  bool _editing = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,83 +34,31 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     super.dispose();
   }
 
-  String _whole(num? v) => v == null ? '—' : v.round().toString();
-
   @override
   Widget build(BuildContext context) {
-    final s = ref.watch(trainerControllerProvider);
+    final deviceName = ref.watch(trainerControllerProvider.select((s) => s.deviceName));
+    final error = ref.watch(trainerControllerProvider.select((s) => s.error));
     final c = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
-    final d = s.latest;
-    final rideUnits = ref.watch(rideUnitsProvider);
     final active = ref.watch(
         recorderProvider.select((r) => r.status != RecStatus.idle));
-
-    final tiles = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      MetricTile(
-        label: 'Power (3 s average)',
-        value: _whole(s.smoothedPower),
-        unit: 'W',
-        hero: true,
-        footnote: 'Right now ${_whole(d?.powerWatts)} W',
-      ),
-      const SizedBox(height: 12),
-      Row(children: [
-        Expanded(
-          child: MetricTile(
-              label: 'Cadence', value: _whole(d?.cadenceRpm), unit: 'rpm'),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: MetricTile(
-            label: 'Speed',
-            value: d?.speedKph == null
-                ? '—'
-                : speedIn(d!.speedKph!, rideUnits).toStringAsFixed(1),
-            unit: speedUnit(rideUnits),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: MetricTile(
-              label: 'Heart rate', value: _whole(d?.heartRate), unit: 'bpm'),
-        ),
-      ]),
-    ]);
-
-    final ergCard = Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('ERG target', style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 8),
-            Text('${s.targetWatts} W', style: theme.textTheme.headlineMedium),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final delta in const [-25, -10, -5, 5, 10, 25])
-                FilledButton.tonal(
-                  onPressed: () => c.adjustTarget(delta),
-                  child: Text(delta > 0 ? '+$delta' : '$delta'),
-                ),
-            ]),
-          ],
-        ),
-      ),
-    );
 
     final deviceRow = Row(children: [
       const Icon(Icons.bluetooth_connected, size: 20),
       const SizedBox(width: 8),
       Expanded(
         child: Text(
-          s.deviceName ?? 'Trainer',
+          deviceName ?? 'Trainer',
           style: theme.textTheme.titleMedium,
           overflow: TextOverflow.ellipsis,
         ),
       ),
+      if (!_editing)
+        TextButton.icon(
+          onPressed: () => setState(() => _editing = true),
+          icon: const Icon(Icons.dashboard_customize_outlined),
+          label: const Text('Edit layout'),
+        ),
       TextButton.icon(
         onPressed: c.disconnect,
         icon: const Icon(Icons.link_off),
@@ -117,52 +67,25 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     ]);
 
     return LayoutBuilder(builder: (context, box) {
-      final wide = isWideLayout(box.maxWidth);
+      final compact = !isWideLayout(box.maxWidth);
 
-      // Controls, live numbers and (once recording) totals and chart read as
-      // one workout: outlined together while a ride is being recorded.
-      final Widget workout;
-      if (wide) {
-        // Live numbers and the ERG target on the left, the ride so far on the
-        // right; the chart takes whatever height the window has left.
-        final chartHeight = (box.maxHeight - 430).clamp(260.0, 640.0);
-        workout = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const WorkoutBar(),
-          const SizedBox(height: 12),
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(
-              flex: 5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [tiles, const SizedBox(height: 12), ergCard],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 6,
-              child: active
-                  ? WorkoutSummary(chartHeight: chartHeight)
-                  : const _IdleHint(),
-            ),
-          ]),
-        ]);
-      } else {
-        workout = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const WorkoutBar(),
-          const SizedBox(height: 12),
-          tiles,
-          if (active) ...[
-            const SizedBox(height: 12),
-            const WorkoutSummary(),
-          ],
-        ]);
-      }
+      // Controls and tiles read as one workout: outlined together while a
+      // ride is being recorded.
+      final workout = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const WorkoutBar(),
+        const SizedBox(height: 12),
+        DashboardGrid(editing: _editing, compact: compact),
+      ]);
 
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
           deviceRow,
           const SizedBox(height: 12),
+          if (_editing) ...[
+            _EditToolbar(onDone: () => setState(() => _editing = false)),
+            const SizedBox(height: 12),
+          ],
           Container(
             padding: EdgeInsets.all(active ? 12 : 0),
             decoration: BoxDecoration(
@@ -174,10 +97,9 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             ),
             child: workout,
           ),
-          if (!wide) ...[const SizedBox(height: 12), ergCard],
-          if (s.error != null) ...[
+          if (error != null) ...[
             const SizedBox(height: 12),
-            Text(s.error!, style: TextStyle(color: theme.colorScheme.error)),
+            Text(error, style: TextStyle(color: theme.colorScheme.error)),
           ],
         ],
       );
@@ -185,27 +107,49 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
   }
 }
 
-/// Fills the space the ride summary will use, so the wide layout is balanced
-/// before recording starts.
-class _IdleHint extends StatelessWidget {
-  const _IdleHint();
+class _EditToolbar extends ConsumerWidget {
+  const _EditToolbar({required this.onDone});
+
+  final VoidCallback onDone;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final layout = ref.watch(dashboardLayoutProvider);
+    final c = ref.read(dashboardLayoutProvider.notifier);
+    final unplaced = layout.unplaced;
+    final isStandard = layout.toJson() == DashboardLayout.standard.toJson();
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(children: [
-          Icon(Icons.show_chart, size: 40, color: theme.colorScheme.outline),
-          const SizedBox(height: 12),
-          Text('Press Record to start this ride',
-              style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('Totals and a live chart appear here.',
-              style: theme.textTheme.bodySmall),
-        ]),
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('Drag a tile onto another to reorder. Use the gear to '
+                'resize it or change what it shows.'),
+            PopupMenuButton<TileKind>(
+              enabled: unplaced.isNotEmpty,
+              tooltip: unplaced.isEmpty ? 'Everything is already on the dashboard' : 'Add tile',
+              onSelected: c.add,
+              itemBuilder: (_) => [
+                for (final k in unplaced) PopupMenuItem(value: k, child: Text(k.label)),
+              ],
+              child: Chip(
+                avatar: const Icon(Icons.add, size: 18),
+                label: const Text('Add tile'),
+                side: unplaced.isEmpty ? BorderSide.none : null,
+              ),
+            ),
+            TextButton(
+              onPressed: isStandard ? null : c.reset,
+              child: const Text('Reset to default'),
+            ),
+            FilledButton(onPressed: onDone, child: const Text('Done')),
+          ],
+        ),
       ),
     );
   }

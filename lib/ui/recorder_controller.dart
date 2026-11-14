@@ -38,6 +38,14 @@ final rideExporterProvider = Provider<
   (ref) => exportRide,
 );
 
+/// Totals for the ride being recorded, recomputed once per recorded sample.
+final liveRideStatsProvider = Provider<RideStats>((ref) {
+  final samples = ref.watch(recorderProvider.select((r) => r.samples));
+  final profile = ref.watch(riderProfileProvider);
+  ref.watch(recorderProvider.select((r) => r.samples.length));
+  return RideStats.of(samples, kcal: rideKcal(samples, profile));
+});
+
 final rideFormatProvider =
     NotifierProvider<RideFormatController, RideFormat>(RideFormatController.new);
 

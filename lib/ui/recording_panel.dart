@@ -5,9 +5,7 @@ import '../core/ride_recording.dart';
 import '../core/ride_stats.dart';
 import 'format.dart';
 import 'recorder_controller.dart';
-import 'ride_chart.dart';
 import 'rider_profile_controller.dart';
-import 'units_controller.dart';
 
 /// Timer and record/pause/stop controls. Always visible, so starting a ride
 /// does not move anything on screen.
@@ -135,53 +133,6 @@ class WorkoutBar extends ConsumerWidget {
           const Spacer(),
           Wrap(spacing: 8, children: controls),
         ]),
-      ),
-    );
-  }
-}
-
-/// Totals so far, and the chart with its options. Only shown once a ride is
-/// being recorded.
-class WorkoutSummary extends ConsumerWidget {
-  const WorkoutSummary({super.key, this.chartHeight = 240});
-
-  final double chartHeight;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final rec = ref.watch(recorderProvider);
-    final settings = ref.watch(chartSettingsProvider);
-    final kcal = rideKcal(rec.samples, ref.watch(riderProfileProvider));
-    final stats = RideStats.of(rec.samples, kcal: kcal);
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RideStatRow(stats: stats),
-            if (kcal == null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Add your rider profile in Preferences to estimate calories.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            const SizedBox(height: 16),
-            SizedBox(
-              height: chartHeight,
-              child: RideChart(
-                samples: rec.samples,
-                settings: settings,
-                units: ref.watch(rideUnitsProvider),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ChartOptions(settings: settings),
-          ],
-        ),
       ),
     );
   }
