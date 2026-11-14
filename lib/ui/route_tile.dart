@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/route.dart';
+import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
 import 'route_screen.dart';
@@ -25,7 +26,8 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
   void _fit(SavedRoute r) {
     if (!_ready) return;
     _map.fitCamera(CameraFit.bounds(
-        bounds: LatLngBounds.fromPoints(r.path), padding: const EdgeInsets.all(32)));
+        bounds: LatLngBounds.fromPoints(r.path),
+        padding: const EdgeInsets.all(32)));
   }
 
   @override
@@ -64,57 +66,77 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: Stack(children: [
-        FlutterMap(
-          mapController: _map,
-          options: MapOptions(
-            initialCenter: progress.position,
-            initialZoom: _followZoom,
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-            onMapReady: () {
-              _ready = true;
-              _follow ? _map.move(progress.position, _followZoom) : _fit(r);
-            },
-          ),
-          children: [
-            ...mapBaseLayers(ref),
-            PolylineLayer(polylines: [routeLine(r.path)]),
-            MarkerLayer(markers: [riderMarker(progress.position)]),
-          ],
-        ),
-        Positioned(
-          top: 8,
-          left: 8,
-          right: 8,
-          child: Row(children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(999),
+      child: Column(children: [
+        Expanded(
+          child: Stack(children: [
+            FlutterMap(
+              mapController: _map,
+              options: MapOptions(
+                initialCenter: progress.position,
+                initialZoom: _followZoom,
+                interactionOptions:
+                    const InteractionOptions(flags: InteractiveFlag.none),
+                onMapReady: () {
+                  _ready = true;
+                  _follow ? _map.move(progress.position, _followZoom) : _fit(r);
+                },
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Text(progress.finished
-                    ? '${r.name} · finished'
-                    : '${r.name} · ${routeDistanceText(r.lengthMeters - progress.meters)} to go'),
-              ),
+              children: [
+                ...mapBaseLayers(ref),
+                PolylineLayer(polylines: [routeLine(r.path)]),
+                MarkerLayer(markers: [riderMarker(progress.position)]),
+              ],
             ),
-            const Spacer(),
-            IconButton.filledTonal(
-              tooltip: _follow ? 'Show whole route' : 'Follow me',
-              icon: Icon(_follow ? Icons.zoom_out_map : Icons.my_location),
-              onPressed: () {
-                setState(() => _follow = !_follow);
-                _follow ? _map.move(progress.position, _followZoom) : _fit(r);
-              },
-            ),
-            IconButton.filledTonal(
-              tooltip: 'Stop route',
-              icon: const Icon(Icons.close),
-              onPressed: ref.read(routeRunProvider.notifier).stop,
+            Positioned(
+              top: 8,
+              left: 8,
+              right: 8,
+              child: Row(children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Text(progress.finished
+                        ? '${r.name} · finished'
+                        : '${r.name} · ${routeDistanceText(r.lengthMeters - progress.meters)} to go'
+                            '${r.elevation == null ? '' : ' · ${r.elevation!.gradeAt(progress.meters).toStringAsFixed(1)}%'}'),
+                  ),
+                ),
+                const Spacer(),
+                IconButton.filledTonal(
+                  tooltip: _follow ? 'Show whole route' : 'Follow me',
+                  icon: Icon(_follow ? Icons.zoom_out_map : Icons.my_location),
+                  onPressed: () {
+                    setState(() => _follow = !_follow);
+                    _follow
+                        ? _map.move(progress.position, _followZoom)
+                        : _fit(r);
+                  },
+                ),
+                IconButton.filledTonal(
+                  tooltip: 'Stop route',
+                  icon: const Icon(Icons.close),
+                  onPressed: ref.read(routeRunProvider.notifier).stop,
+                ),
+              ]),
             ),
           ]),
         ),
+        if (r.elevation != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+            child: ElevationChart(
+                profile: r.elevation!,
+                height: 64,
+                riderMeters: progress.meters),
+          ),
       ]),
     );
   }

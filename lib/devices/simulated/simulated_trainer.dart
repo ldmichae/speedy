@@ -13,6 +13,8 @@ class SimulatedTrainer implements Trainer {
   final _clock = Stopwatch();
   Timer? _timer;
   int? _target;
+  double? _grade;
+  double _crr = 0.004, _cw = 0.51;
   double _power = 0;
   bool _disposed = false;
 
@@ -34,14 +36,18 @@ class SimulatedTrainer implements Trainer {
 
   void _tick() {
     final target = _target;
-    if (target != null) {
+    if (_grade != null) {
+      _power = 150; // the rider pedals; the grade changes the speed, not the power
+    } else if (target != null) {
       _power += (target - _power) * 0.25;
     } else {
       _power = 120 + _rng.nextDouble() * 20;
     }
     final watts = max(0, (_power + (_rng.nextDouble() - 0.5) * 8).round());
     // Placeholder power-to-speed curve; the real physics model comes later.
-    final speed = 4.2 * pow(max(watts, 1), 1 / 3);
+    final speed = _grade == null
+        ? 4.2 * pow(max(watts, 1), 1 / 3)
+        : simulatedSpeedKph(watts, _grade!, crr: _crr, cw: _cw);
     _data.add(BikeData(
       powerWatts: watts,
       cadenceRpm: 88 + (_rng.nextDouble() - 0.5) * 6,
@@ -51,7 +57,10 @@ class SimulatedTrainer implements Trainer {
   }
 
   @override
-  Future<void> setTargetPower(int watts) async => _target = watts;
+  Future<void> setTargetPower(int watts) async {
+    _target = watts;
+    _grade = null; // ERG replaces SIM, as on a real trainer
+  }
 
   @override
   Future<void> setSimulation({
@@ -60,7 +69,9 @@ class SimulatedTrainer implements Trainer {
     double crr = 0.004,
     double cw = 0.51,
   }) async {
-    // Not modelled yet.
+    _grade = gradePercent;
+    _crr = crr;
+    _cw = cw;
   }
 
   @override
@@ -78,4 +89,21 @@ class SimulatedTrainer implements Trainer {
     await _data.close();
     await _status.close();
   }
+}
+
+/// Steady speed (km/h) for a rider putting out [watts] on [gradePercent]:
+/// solves watts = v * (m g (grade + crr) + cw v^2) for v. Rider + bike are
+/// taken as 85 kg; real trainers use the weight set in their own app.
+double simulatedSpeedKph(int watts, double gradePercent,
+    {double crr = 0.004, double cw = 0.51, double massKg = 85}) {
+  double power(double v) =>
+      v * (massKg * 9.81 * (gradePercent / 100 + crr) + cw * v * v);
+  var lo = 0.0, hi = 30.0; // m/s
+  // On a steep enough climb the rider can barely move: floor at walking pace.
+  if (power(0.5) > watts) return 1.8;
+  for (var i = 0; i < 40; i++) {
+    final mid = (lo + hi) / 2;
+    power(mid) < watts ? lo = mid : hi = mid;
+  }
+  return lo * 3.6;
 }

@@ -8,7 +8,7 @@ import '../core/ride_recording.dart';
 import 'dashboard_grid.dart';
 import 'dashboard_layout_controller.dart';
 import 'layout.dart';
-import 'plan_controller.dart';
+import 'route_controller.dart';
 import 'plan_screen.dart';
 import 'recorder_controller.dart';
 import 'recording_panel.dart';
@@ -50,7 +50,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
 
   /// A plan owns the target while it runs.
   void _nudge(int watts) {
-    if (ref.read(planRunProvider) == null) {
+    if (ref.read(targetLockProvider) == null) {
       ref.read(trainerControllerProvider.notifier).adjustTarget(watts);
     }
   }

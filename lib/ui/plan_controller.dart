@@ -7,6 +7,7 @@ import '../core/plan.dart';
 import '../core/prefs.dart';
 import '../core/ride_recording.dart';
 import 'recorder_controller.dart';
+import 'route_controller.dart';
 import 'trainer_controller.dart';
 
 /// Functional threshold power in watts; null until the rider sets it.
@@ -96,6 +97,7 @@ class PlanRunner extends Notifier<PlanRun?> {
   /// Starts recording (or resumes it) and rides [plan]; [ftp] is needed for
   /// a percent plan.
   void start(Plan plan, int? ftp) {
+    ref.read(routeRunProvider.notifier).endSimulation(); // a plan owns the target
     ref.read(recorderProvider.notifier).startOrResume();
     _applied = null;
     state = PlanRun(plan.name, plan.resolve(ftp),

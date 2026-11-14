@@ -9,6 +9,7 @@ import 'format.dart';
 import '../core/plan.dart';
 import 'metric_tile.dart';
 import 'plan_controller.dart';
+import 'route_controller.dart';
 import 'route_tile.dart';
 import 'recorder_controller.dart';
 import 'ride_chart.dart';
@@ -119,6 +120,7 @@ class _PowerTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final power = ref.watch(trainerControllerProvider.select(pick));
     final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
+    final simulating = ref.watch(trainerControllerProvider.select((s) => s.simulating));
     final theme = Theme.of(context);
 
     return Card(
@@ -129,7 +131,7 @@ class _PowerTile extends ConsumerWidget {
           // A tile one row high has no room for a line of its own, so the
           // chip moves up beside the label.
           final roomy = box.maxHeight >= 120;
-          final chip = power == null
+          final chip = power == null || simulating
               ? null
               : TargetChip(power: power, target: target);
           return Column(
@@ -263,7 +265,9 @@ class _ErgTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
-    final following = ref.watch(planRunProvider.select((r) => r != null));
+    final lock = ref.watch(targetLockProvider);
+    final following = lock != null;
+    final grade = ref.watch(trainerControllerProvider.select((s) => s.gradePercent));
     final c = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
 
@@ -278,11 +282,16 @@ class _ErgTile extends ConsumerWidget {
               Tooltip(
                 message: 'ERG mode: the trainer holds this power whatever your '
                     'cadence.\nArrow up/down: ±5 W. Shift + arrow: ±25 W.',
-                child: Text(following ? 'ERG target · set by plan' : 'ERG target',
+                child: Text(
+                    switch (lock) {
+                      TargetLock.plan => 'ERG target · set by plan',
+                      TargetLock.simulation => 'Simulation · grade',
+                      null => 'ERG target',
+                    },
                     style: theme.textTheme.bodyMedium),
               ),
               const Spacer(),
-              Text('$target W',
+              Text(grade != null ? '${grade.toStringAsFixed(1)}%' : '$target W',
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.w700,
@@ -300,7 +309,9 @@ class _ErgTile extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: Tooltip(
                           message: following
-                              ? 'The plan sets the target. Stop the plan to adjust it.'
+                              ? (lock == TargetLock.plan
+                                  ? 'The plan sets the target. Stop the plan to adjust it.'
+                                  : 'The route sets the resistance. Stop the route to adjust it.')
                               : step > 0
                               ? 'Raise target by $step W'
                               : 'Lower target by ${-step} W',

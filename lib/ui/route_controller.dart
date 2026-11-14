@@ -8,10 +8,17 @@ import '../core/prefs.dart';
 import '../core/ride_recording.dart';
 import '../core/route.dart';
 import '../core/route_service.dart';
+import '../devices/trainer_session.dart';
+import 'plan_controller.dart';
 import 'recorder_controller.dart';
+import 'trainer_controller.dart';
 
 /// Overridable so tests never touch the network.
 final routeSnapperProvider = Provider<RouteSnapper>((ref) => OsrmSnapper());
+
+/// Overridable so tests never touch the network.
+final elevationSourceProvider =
+    Provider<ElevationSource>((ref) => OpenMeteoElevation());
 
 final routesProvider =
     NotifierProvider<RoutesController, List<SavedRoute>>(RoutesController.new);
@@ -46,10 +53,12 @@ class RoutesController extends PersistedNotifier<List<SavedRoute>> {
 
 /// A route being ridden. [origin] is the ride distance (metres) at which the
 /// route's start line sits, so riding it mid-recording starts it at zero.
+/// With [simulate] the trainer applies the route's grade as resistance.
 class RouteRun {
-  const RouteRun(this.route, this.origin);
+  const RouteRun(this.route, this.origin, {this.simulate = false});
   final SavedRoute route;
   final double origin;
+  final bool simulate;
 }
 
 final routeRunProvider = NotifierProvider<RouteRunner, RouteRun?>(RouteRunner.new);
@@ -60,17 +69,69 @@ class RouteRunner extends Notifier<RouteRun?> {
     ref.listen(recorderProvider.select((r) => r.status), (_, s) {
       if (s == RecStatus.idle) stop(); // saved or discarded
     });
+    // Once a second while riding: follow the road's grade.
+    ref.listen(recorderProvider, (_, __) => _sync());
     return null;
   }
 
-  /// Starts recording (or resumes it) and puts the rider at the route's start.
-  void start(SavedRoute route) {
+  /// Starts recording (or resumes it) and puts the rider at the route's
+  /// start. [simulate] needs elevation and takes the target from any plan.
+  void start(SavedRoute route, {bool simulate = false}) {
+    final sim = simulate && route.elevation != null;
+    if (sim) ref.read(planRunProvider.notifier).stop();
     ref.read(recorderProvider.notifier).startOrResume();
-    state = RouteRun(route, ref.read(liveRideStatsProvider).distanceMeters);
+    state = RouteRun(route, ref.read(liveRideStatsProvider).distanceMeters,
+        simulate: sim);
+    _sync();
   }
 
-  void stop() => state = null;
+  /// Back to ERG at the last target; the route and map carry on.
+  void endSimulation() {
+    final r = state;
+    if (r == null || !r.simulate) return;
+    state = RouteRun(r.route, r.origin);
+    _leaveSim();
+  }
+
+  void stop() {
+    final wasSim = state?.simulate ?? false;
+    state = null;
+    if (wasSim) _leaveSim();
+  }
+
+  void _leaveSim() {
+    final t = ref.read(trainerControllerProvider.notifier);
+    t.setTarget(ref.read(trainerControllerProvider).targetWatts);
+  }
+
+  void _sync() {
+    final r = state;
+    final ele = r?.route.elevation;
+    if (r == null || !r.simulate || ele == null) return;
+    if (ref.read(recorderProvider).status != RecStatus.recording) return;
+    final meters = (ref.read(liveRideStatsProvider).distanceMeters - r.origin)
+        .clamp(0.0, r.route.lengthMeters)
+        .toDouble();
+    final grade =
+        meters >= r.route.lengthMeters ? 0.0 : ele.gradeAt(meters); // flat at the finish
+    final t = ref.read(trainerControllerProvider);
+    // Compared with what the trainer was last told, so a reconnect re-sends.
+    if (t.gradePercent == null || (t.gradePercent! - TrainerSession.clampGrade(grade)).abs() >= 0.2) {
+      ref.read(trainerControllerProvider.notifier).setGrade(grade);
+    }
+  }
 }
+
+/// What owns the ERG target, if anything: the manual controls are locked.
+enum TargetLock { plan, simulation }
+
+final targetLockProvider = Provider<TargetLock?>((ref) {
+  if (ref.watch(planRunProvider) != null) return TargetLock.plan;
+  if (ref.watch(routeRunProvider.select((r) => r?.simulate ?? false))) {
+    return TargetLock.simulation;
+  }
+  return null;
+});
 
 /// Where the rider is on the route being ridden.
 class RouteProgress {

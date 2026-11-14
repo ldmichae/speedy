@@ -88,8 +88,9 @@ class Recording {
 
 /// What the trainer says at one instant.
 class SampleInput {
-  const SampleInput({required this.target, this.data, this.smoothedPower});
-  final int target;
+  const SampleInput({this.target, this.data, this.smoothedPower});
+  /// The ERG target; null while the trainer simulates a grade.
+  final int? target;
   final BikeData? data;
   final double? smoothedPower;
 }

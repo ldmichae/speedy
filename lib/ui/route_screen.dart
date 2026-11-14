@@ -3,9 +3,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../core/elevation.dart';
 import '../core/route.dart';
 import '../core/route_service.dart';
 import '../devices/trainer.dart';
+import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
 import 'trainer_controller.dart';
@@ -56,18 +58,41 @@ class RoutesScreen extends ConsumerWidget {
           : ListView(children: [
               for (final r in routes)
                 ListTile(
-                  leading: const Icon(Icons.route),
+                  leading: r.elevation == null
+                      ? const Icon(Icons.route)
+                      : SizedBox(
+                          width: 96,
+                          child: ElevationChart(profile: r.elevation!, height: 48)),
                   title: Text(r.name),
-                  subtitle: Text(routeDistanceText(r.lengthMeters)),
+                  subtitle: Text(routeDistanceText(r.lengthMeters) +
+                      (r.elevation == null
+                          ? ''
+                          : ' · ↑ ${r.elevation!.climb.round()} m')),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                     IconButton(
                       tooltip: 'Delete',
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () => ref.read(routesProvider.notifier).delete(r),
                     ),
+                    if (r.elevation != null)
+                      IconButton.filledTonal(
+                        tooltip: connected
+                            ? 'Ride with simulated climbs: the trainer '
+                                'follows the road grade'
+                            : 'Connect a trainer to ride',
+                        icon: const Icon(Icons.terrain),
+                        onPressed: connected
+                            ? () {
+                                ref
+                                    .read(routeRunProvider.notifier)
+                                    .start(r, simulate: true);
+                                Navigator.of(context).pop();
+                              }
+                            : null,
+                      ),
                     IconButton.filled(
                       tooltip: connected
-                          ? 'Ride this route (starts recording)'
+                          ? 'Ride this route in ERG (starts recording)'
                           : 'Connect a trainer to ride',
                       icon: const Icon(Icons.play_arrow),
                       onPressed: connected
@@ -105,6 +130,9 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
   final _name = TextEditingController();
   final _points = <LatLng>[];
   final _legs = <_Leg>[];
+  ElevationProfile? _elevation;
+  bool _elevLoading = false;
+  String? _elevError;
 
   bool get _loading => _legs.any((l) => l.path == null);
   bool get _anyStraight => _legs.any((l) => !l.snapped);
@@ -115,6 +143,7 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
 
   Future<void> _add(LatLng p) async {
     setState(() {
+      _elevation = null;
       _points.add(p);
       if (_points.length > 1) _legs.add(_Leg(_points[_points.length - 2], p));
     });
@@ -131,26 +160,52 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
 
   void _undo() => setState(() {
         if (_points.isEmpty) return;
+        _elevation = null;
         _points.removeLast();
         if (_legs.isNotEmpty) _legs.removeLast();
       });
 
   void _clear() => setState(() {
+        _elevation = null;
         _points.clear();
         _legs.clear();
       });
 
-  void _save() {
+  SavedRoute _draft() {
     final name = _name.text.trim();
-    Navigator.of(context).pop(
-        SavedRoute(name.isEmpty ? 'Untitled route' : name, List.of(_points), _path));
+    return SavedRoute(name.isEmpty ? 'Untitled route' : name, List.of(_points), _path);
+  }
+
+  /// Looks up heights for the drawn path; a failure is shown, not fatal.
+  Future<void> _loadElevation() async {
+    setState(() {
+      _elevLoading = true;
+      _elevError = null;
+    });
+    try {
+      final e = await buildElevation(_draft(), ref.read(elevationSourceProvider));
+      if (mounted) setState(() => _elevation = e);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _elevError = 'Could not load elevation. The route can '
+            'still be saved without it.');
+      }
+    } finally {
+      if (mounted) setState(() => _elevLoading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_elevation == null && !_elevLoading) await _loadElevation();
+    if (!mounted) return;
+    Navigator.of(context).pop(_draft().withElevation(_elevation));
   }
 
   @override
   Widget build(BuildContext context) {
     final path = _path;
     final length = path.length < 2 ? 0.0 : pathLength(path);
-    final canSave = _points.length >= 2 && !_loading;
+    final canSave = _points.length >= 2 && !_loading && !_elevLoading;
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
@@ -222,6 +277,22 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: _anyStraight ? scheme.error : null),
             ),
+            if (_elevation != null) ...[
+              const SizedBox(height: 8),
+              ElevationChart(profile: _elevation!, height: 90),
+              Text(elevationSummary(_elevation!),
+                  style: Theme.of(context).textTheme.bodySmall),
+            ] else if (_points.length >= 2 && !_loading)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _elevLoading ? null : _loadElevation,
+                  icon: const Icon(Icons.terrain),
+                  label: Text(_elevLoading ? 'Loading elevation…' : 'Show elevation'),
+                ),
+              ),
+            if (_elevError != null)
+              Text(_elevError!, style: TextStyle(color: scheme.error)),
           ]),
         ),
       ]),

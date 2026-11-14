@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/ride_stats.dart';
 import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/route_service.dart';
+import 'package:indoor_cycling/ui/elevation_chart.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/route_map.dart';
@@ -26,12 +27,21 @@ class _Straight implements RouteSnapper {
   Future<List<LatLng>> snap(LatLng a, LatLng b) async => [a, b];
 }
 
+class _Hills implements ElevationSource {
+  bool fail = false;
+  @override
+  Future<List<double>> elevations(List<LatLng> p) async => fail
+      ? throw Exception("down")
+      : [for (var i = 0; i < p.length; i++) i * 1.0];
+}
+
 final _route = SavedRoute('R', const [LatLng(0, 0), LatLng(0.002, 0)],
     const [LatLng(0, 0), LatLng(0.001, 0), LatLng(0.002, 0)]);
 
 final _meters = StateProvider<double>((ref) => 0);
 
 void main() {
+  elevationEditorTests();
   Widget app(Widget child) => ProviderScope(
         overrides: [
           tileProviderProvider.overrideWithValue(_Blank()),
@@ -95,5 +105,50 @@ void main() {
     c.read(recorderProvider.notifier).discard();
     await t.pump();
     expect(find.text('No route selected'), findsOneWidget);
+  });
+}
+
+void elevationEditorTests() {
+  testWidgets('the editor shows elevation on request and saves it with the route',
+      (t) async {
+    t.view.physicalSize = const Size(500, 900);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    SavedRoute? saved;
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        tileProviderProvider.overrideWithValue(_Blank()),
+        routeSnapperProvider.overrideWithValue(_Straight()),
+        elevationSourceProvider.overrideWithValue(_Hills()),
+      ],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async => saved = await Navigator.of(context).push(
+                  MaterialPageRoute<SavedRoute>(builder: (_) => const RouteEditor())),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    final map = find.byType(FlutterMap);
+    await t.tapAt(t.getCenter(map));
+    await t.pump();
+    await t.tapAt(t.getCenter(map) + const Offset(0, -100));
+    await t.pump();
+    await t.pump();
+
+    await t.tap(find.text('Show elevation'));
+    await t.pumpAndSettle();
+    expect(find.byType(ElevationChart), findsOneWidget);
+    expect(find.textContaining('steepest'), findsOneWidget);
+
+    await t.tap(find.text('Save'));
+    await t.pumpAndSettle();
+    expect(saved?.elevation, isNotNull);
   });
 }

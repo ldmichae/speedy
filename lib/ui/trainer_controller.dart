@@ -26,6 +26,7 @@ class TrainerState {
     this.latest,
     this.smoothedPower,
     this.targetWatts = 100,
+    this.gradePercent,
     this.scanning = false,
     this.scanResults = const [],
     this.error,
@@ -36,6 +37,10 @@ class TrainerState {
   final BikeData? latest;
   final double? smoothedPower;
   final int targetWatts;
+
+  /// Road grade while the trainer simulates a route; null in ERG mode.
+  final double? gradePercent;
+  bool get simulating => gradePercent != null;
   final bool scanning;
   final List<BleScanResult> scanResults;
   final String? error;
@@ -46,6 +51,8 @@ class TrainerState {
     BikeData? latest,
     double? smoothedPower,
     int? targetWatts,
+    double? gradePercent,
+    bool clearGrade = false,
     bool? scanning,
     List<BleScanResult>? scanResults,
     String? error,
@@ -58,6 +65,7 @@ class TrainerState {
       latest: clearData ? null : (latest ?? this.latest),
       smoothedPower: clearData ? null : (smoothedPower ?? this.smoothedPower),
       targetWatts: targetWatts ?? this.targetWatts,
+      gradePercent: clearGrade ? null : (gradePercent ?? this.gradePercent),
       scanning: scanning ?? this.scanning,
       scanResults: scanResults ?? this.scanResults,
       error: clearError ? null : (error ?? this.error),
@@ -153,7 +161,7 @@ class TrainerController extends Notifier<TrainerState> {
 
   Future<void> setTarget(int watts) async {
     final w = TrainerSession.clampTarget(watts);
-    state = state.copyWith(targetWatts: w);
+    state = state.copyWith(targetWatts: w, clearGrade: true); // ERG replaces SIM
     try {
       await _session?.setTarget(w);
     } catch (e) {
@@ -162,6 +170,18 @@ class TrainerController extends Notifier<TrainerState> {
   }
 
   Future<void> adjustTarget(int delta) => setTarget(state.targetWatts + delta);
+
+  /// Simulation mode: the trainer applies road [gradePercent] as resistance.
+  /// Sending an ERG target (setTarget) switches back.
+  Future<void> setGrade(double gradePercent) async {
+    final g = TrainerSession.clampGrade(gradePercent);
+    state = state.copyWith(gradePercent: g);
+    try {
+      await _session?.setSimulation(g);
+    } catch (e) {
+      state = state.copyWith(error: 'Could not set grade: $e');
+    }
+  }
 
   Future<void> disconnect() async {
     await _release();

@@ -26,6 +26,10 @@ class TrainerSession {
   static const maxTargetWatts = 1500;
   static int clampTarget(int watts) => watts.clamp(0, maxTargetWatts).toInt();
 
+  /// Steepest grades sent to the trainer; real units cap near these anyway.
+  static const maxGrade = 15.0, minGrade = -10.0;
+  static double clampGrade(double g) => g.clamp(minGrade, maxGrade).toDouble();
+
   final Trainer trainer;
   late final Duration Function() _now;
   final _smoother = PowerSmoother();
@@ -41,6 +45,10 @@ class TrainerSession {
   /// Holds [watts] (clamped to 0..[maxTargetWatts]) in ERG mode.
   Future<void> setTarget(int watts) =>
       trainer.setTargetPower(clampTarget(watts));
+
+  /// Simulates road [gradePercent] (clamped to a rideable range).
+  Future<void> setSimulation(double gradePercent) =>
+      trainer.setSimulation(gradePercent: clampGrade(gradePercent));
 
   void _onData(BikeData d) {
     final p = d.powerWatts;

@@ -1,5 +1,7 @@
 import 'package:latlong2/latlong.dart';
 
+import 'elevation.dart';
+
 const _dist = Distance(roundResult: false);
 
 /// Length of a polyline in metres.
@@ -14,11 +16,17 @@ double pathLength(List<LatLng> path) {
 /// A drawn route: the points the rider clicked, and the road-snapped
 /// [path] between them (stored, so riding it needs no network).
 class SavedRoute {
-  SavedRoute(this.name, this.waypoints, this.path)
+  SavedRoute(this.name, this.waypoints, this.path, {this.elevation})
       : assert(path.length >= 2);
   final String name;
   final List<LatLng> waypoints;
   final List<LatLng> path;
+
+  /// Null until fetched, or if the fetch failed.
+  final ElevationProfile? elevation;
+
+  SavedRoute withElevation(ElevationProfile? e) =>
+      SavedRoute(name, waypoints, path, elevation: e);
 
   /// Metres from the start to each point of [path].
   late final List<double> cumulative = () {
@@ -56,6 +64,7 @@ class SavedRoute {
         'name': name,
         'wp': [for (final p in waypoints) [p.latitude, p.longitude]],
         'path': [for (final p in path) [p.latitude, p.longitude]],
+        if (elevation != null) 'ele': elevation!.toJson(),
       };
 
   /// Null if [j] is not a usable route (stored data is never trusted).
@@ -75,7 +84,8 @@ class SavedRoute {
 
     final wp = points(j['wp']), path = points(j['path']);
     if (wp == null || path == null || path.length < 2) return null;
-    return SavedRoute(j['name'] as String, wp, path);
+    return SavedRoute(j['name'] as String, wp, path,
+        elevation: ElevationProfile.fromJson(j['ele']));
   }
 }
 
