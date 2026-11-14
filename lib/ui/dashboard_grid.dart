@@ -91,7 +91,7 @@ class _DashboardGridState extends ConsumerState<DashboardGrid> {
     final sides = widget.compact
         ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             left,
-            if (widget.editing || _hasShown(Side.right, layout, recording))
+            if (widget.editing || layout.right.isNotEmpty)
               const SizedBox(height: _sideGap),
             right,
           ])
@@ -121,8 +121,6 @@ class _DashboardGridState extends ConsumerState<DashboardGrid> {
   bool _visible(TileConfig t, bool recording) =>
       widget.editing || recording || !t.kind.rideOnly;
 
-  bool _hasShown(Side s, DashboardLayout layout, bool recording) =>
-      layout.side(s).any((t) => _visible(t, recording));
 
   Widget _buildSide(Side side, DashboardLayout layout, bool recording) {
     final editing = widget.editing;
@@ -145,13 +143,21 @@ class _DashboardGridState extends ConsumerState<DashboardGrid> {
 
       final Widget content;
       if (shown.isEmpty) {
-        // An empty side still needs somewhere to drop a tile while editing.
+        // A side whose tiles all wait for a ride says so, instead of being a
+        // blank half-window; while editing, an empty side is a drop zone.
+        final waitingForRide = !editing && layout.side(side).isNotEmpty;
         content = SizedBox(
           key: _keys[side],
-          height: editing ? 2 * _rowHeight : 0,
+          height: editing
+              ? 2 * _rowHeight
+              : waitingForRide
+                  ? (widget.compact ? _rowHeight : 2 * _rowHeight + _gap)
+                  : 0,
           child: editing
               ? const Center(child: Text('Drop tiles here'))
-              : const SizedBox.shrink(),
+              : waitingForRide
+                  ? const _RideHint()
+                  : const SizedBox.shrink(),
         );
       } else {
         content = SizedBox(
@@ -224,6 +230,45 @@ class _DashboardGridState extends ConsumerState<DashboardGrid> {
         ),
       );
     });
+  }
+}
+
+/// Stands in for tiles that only appear once a ride is being recorded.
+class _RideHint extends StatelessWidget {
+  const _RideHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.show_chart, size: 32, color: theme.colorScheme.outline),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Your ride shows up here',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text('The chart and totals appear once you press Record.',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

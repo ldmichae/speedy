@@ -96,8 +96,8 @@ void main() {
     });
 
     test('usedRows is the bottom of the lowest tile', () {
-      expect(usedRows(standard.left), 5); // hero 2 + small + totals + energy
-      expect(usedRows(standard.right), 6); // ERG 2 + chart 4
+      expect(usedRows(standard.left), 5); // power 2 + ERG 2 + small row 1
+      expect(usedRows(standard.right), 5); // chart 4 + totals row 1
     });
   });
 
@@ -106,32 +106,44 @@ void main() {
       expect(allKinds(standard).toSet(), hasLength(standard.all.length));
     });
 
-    test('before recording: power and small tiles left, ERG target right', () {
+    test('the ERG controls sit directly under the power tile', () {
+      expect(kinds(standard.left).take(2), [TileKind.powerAvg, TileKind.ergTarget]);
+      final left = place(standard, Side.left);
+      final power = left[TileKind.powerAvg]!;
+      expect(at(left[TileKind.ergTarget]!), (power.row + power.rows, 0));
+    });
+
+    test('elapsed time is not duplicated: the Record bar owns it', () {
+      expect(allKinds(standard), isNot(contains(TileKind.time)));
+      expect(standard.unplaced, [TileKind.powerNow, TileKind.time]);
+    });
+
+    test('before recording: only the left side has anything to show', () {
       bool notRideOnly(TileConfig t) => !t.kind.rideOnly;
       final left = place(standard, Side.left, show: notRideOnly);
       expect(at(left[TileKind.powerAvg]!), (0, 0));
-      expect(at(left[TileKind.cadence]!), (2, 0));
-      expect(at(left[TileKind.speed]!), (2, 1));
-      expect(at(left[TileKind.heartRate]!), (2, 2));
+      expect(at(left[TileKind.ergTarget]!), (2, 0));
+      expect(at(left[TileKind.cadence]!), (4, 0));
+      expect(at(left[TileKind.speed]!), (4, 1));
+      expect(at(left[TileKind.heartRate]!), (4, 2));
       expectNoOverlap(left.values);
 
-      final right = place(standard, Side.right, show: notRideOnly);
-      expect(right.keys, [TileKind.ergTarget]);
-      expect(at(right[TileKind.ergTarget]!), (0, 0));
+      // Everything on the right waits for a ride.
+      expect(place(standard, Side.right, show: notRideOnly), isEmpty);
     });
 
-    test('while recording: totals under the power tile, chart under the ERG', () {
-      final left = place(standard, Side.left);
-      expect(at(left[TileKind.time]!), (3, 0));
-      expect(at(left[TileKind.distance]!), (3, 1));
-      expect(at(left[TileKind.avgPower]!), (3, 2));
-      expect(at(left[TileKind.energy]!), (4, 0));
-      expectNoOverlap(left.values);
-
+    test('while recording: chart on the right over three totals', () {
       final right = place(standard, Side.right);
-      expect(at(right[TileKind.ergTarget]!), (0, 0));
-      expect(at(right[TileKind.chart]!), (2, 0));
+      expect(at(right[TileKind.chart]!), (0, 0));
+      expect(at(right[TileKind.distance]!), (4, 0));
+      expect(at(right[TileKind.avgPower]!), (4, 1));
+      expect(at(right[TileKind.energy]!), (4, 2));
       expectNoOverlap(right.values);
+      expectNoOverlap(place(standard, Side.left).values);
+    });
+
+    test('the two sides end on the same row, so neither leaves a hole', () {
+      expect(usedRows(standard.left), usedRows(standard.right));
     });
 
     test('the two sides are independent grids', () {
@@ -156,33 +168,49 @@ void main() {
 
     test('dropping where it already is changes nothing', () {
       final all = place(standard, Side.left);
-      for (final k in [TileKind.cadence, TileKind.time, TileKind.energy]) {
+      for (final k in [TileKind.ergTarget, TileKind.cadence, TileKind.heartRate]) {
         final p = all[k]!;
         expect(dropOnLeft(k, p.row, p.col), kinds(standard.left), reason: k.name);
       }
     });
 
+    test('dropping a tile exactly where it sits among ties moves nothing else', () {
+      // A full-width tile at the end: two insertion points land it identically,
+      // and the one that leaves its neighbours alone must win.
+      final l = DashboardLayout(
+        left: const [
+          TileConfig(TileKind.cadence, 1, 1),
+          TileConfig(TileKind.speed, 1, 1),
+          TileConfig(TileKind.heartRate, 1, 1),
+          TileConfig(TileKind.energy, 3, 1),
+        ],
+        right: const [],
+      );
+      final p = place(l, Side.left)[TileKind.energy]!;
+      expect(dropOnLeft(TileKind.energy, p.row, p.col, from: l), kinds(l.left));
+    });
+
     test('dropping on another tile takes its slot and shoves it on', () {
-      // Heart rate dropped on cadence's slot (row 2, col 0).
-      final order = dropOnLeft(TileKind.heartRate, 2, 0);
+      // Heart rate dropped on cadence's slot (row 4, col 0).
+      final order = dropOnLeft(TileKind.heartRate, 4, 0);
       expect(order.indexOf(TileKind.heartRate), lessThan(order.indexOf(TileKind.cadence)));
       final p = place(
           DashboardLayout(left: [
             for (final k in order) tile(standard, k)
           ], right: const []),
           Side.left);
-      expect(at(p[TileKind.heartRate]!), (2, 0));
-      expect(at(p[TileKind.cadence]!), (2, 1));
-      expect(at(p[TileKind.speed]!), (2, 2));
+      expect(at(p[TileKind.heartRate]!), (4, 0));
+      expect(at(p[TileKind.cadence]!), (4, 1));
+      expect(at(p[TileKind.speed]!), (4, 2));
     });
 
     test('a big tile dropped on small ones pushes them out of its way', () {
       final from = standard.moveTo(TileKind.chart, Side.left, 99); // chart on the left
-      final order = dropOnLeft(TileKind.chart, 2, 0, from: from);
+      final order = dropOnLeft(TileKind.chart, 4, 0, from: from);
       final l = DashboardLayout(
           left: [for (final k in order) tile(from, k)], right: const []);
       final p = place(l, Side.left);
-      expect(at(p[TileKind.chart]!), (2, 0));
+      expect(at(p[TileKind.chart]!), (4, 0));
       expectNoOverlap(p.values);
       expect(p.length, from.left.length); // nothing lost
     });
@@ -191,9 +219,31 @@ void main() {
       expect(dropOnLeft(TileKind.heartRate, 0, 0).first, TileKind.heartRate);
     });
 
-    test('dropping far below the content puts it last', () {
-      expect(dropOnLeft(TileKind.cadence, 40, 0).last, TileKind.cadence);
+    test('dropping far below the content lands in the last row, at the drop column',
+        () {
+      (int, int) landing(TileKind kind, int row, int col) {
+        final order = dropOnLeft(kind, row, col);
+        final p = place(
+            DashboardLayout(
+                left: [for (final k in order) tile(standard, k)], right: const []),
+            Side.left);
+        return at(p[kind]!);
+      }
+
+      // The last row is row 4 (the three small tiles). A drop beneath it picks
+      // the slot in that row nearest the column, never a gap earlier on.
+      expect(landing(TileKind.cadence, 40, 0), (4, 0));
+      expect(landing(TileKind.cadence, 40, 2), (4, 2));
       expect(dropOnLeft(TileKind.cadence, 40, 2).last, TileKind.cadence);
+    });
+
+    test('dropping below a full last row starts a new row', () {
+      // The right side's last row (distance, avg power, energy) is full.
+      final others = [for (final t in standard.right) t];
+      final i = insertionIndexFor(others, tile(standard, TileKind.cadence), 0, 40);
+      expect(i, others.length); // last
+      final moved = standard.moveTo(TileKind.cadence, Side.right, i);
+      expect(at(place(moved, Side.right)[TileKind.cadence]!), (5, 0));
     });
 
     test('dropping on an empty side just puts it there', () {
@@ -225,17 +275,17 @@ void main() {
     test('moveTo within a side inserts among the other tiles', () {
       var l = standard.moveTo(TileKind.heartRate, Side.left, 1);
       expect(kinds(l.left).sublist(0, 4),
-          [TileKind.powerAvg, TileKind.heartRate, TileKind.cadence, TileKind.speed]);
+          [TileKind.powerAvg, TileKind.heartRate, TileKind.ergTarget, TileKind.cadence]);
 
       // Later: the index counts the tiles without the one being moved.
       l = standard.moveTo(TileKind.cadence, Side.left, 3);
-      expect(kinds(l.left).sublist(0, 4),
-          [TileKind.powerAvg, TileKind.speed, TileKind.heartRate, TileKind.cadence]);
+      expect(kinds(l.left),
+          [TileKind.powerAvg, TileKind.ergTarget, TileKind.speed, TileKind.cadence, TileKind.heartRate]);
     });
 
     test('moveTo the other side takes it off the first', () {
       final l = standard.moveTo(TileKind.cadence, Side.right, 1);
-      expect(kinds(l.right), [TileKind.ergTarget, TileKind.cadence, TileKind.chart]);
+      expect(kinds(l.right).take(3), [TileKind.chart, TileKind.cadence, TileKind.distance]);
       expect(kinds(l.left), isNot(contains(TileKind.cadence)));
       expect(allKinds(l).toSet(), allKinds(standard).toSet());
       expect(l.sideOf(TileKind.cadence), Side.right);
@@ -293,22 +343,22 @@ void main() {
 
     test('showing a metric that is already placed swaps the two tiles', () {
       final l = standard.showInstead(TileKind.cadence, TileKind.speed);
-      expect(kinds(l.left).sublist(1, 3), [TileKind.speed, TileKind.cadence]);
+      expect(kinds(l.left).sublist(2, 4), [TileKind.speed, TileKind.cadence]);
       expect(allKinds(l).toSet(), hasLength(standard.all.length)); // no repeats
     });
 
     test('swapping works across sides, each tile keeping its slot', () {
-      final l = standard.showInstead(TileKind.cadence, TileKind.ergTarget);
-      expect(l.sideOf(TileKind.ergTarget), Side.left);
+      final l = standard.showInstead(TileKind.cadence, TileKind.chart);
+      expect(l.sideOf(TileKind.chart), Side.left);
       expect(l.sideOf(TileKind.cadence), Side.right);
-      // ERG took cadence's slot (index 1 on the left); cadence took ERG's (0).
-      expect(l.left[1].kind, TileKind.ergTarget);
+      // Chart took cadence's slot (index 2 on the left); cadence took the
+      // chart's (index 0 on the right).
+      expect(l.left[2].kind, TileKind.chart);
       expect(l.right[0].kind, TileKind.cadence);
-      // Each is raised to what it needs: ERG needs 2 wide, 2 high.
-      expect(l.left[1].span, greaterThanOrEqualTo(TileKind.ergTarget.minSpan));
-      expect(l.left[1].rows, greaterThanOrEqualTo(TileKind.ergTarget.minRows));
-      // Cadence now sits in the ERG's 3x2 slot.
-      expect((l.right[0].span, l.right[0].rows), (3, 2));
+      // The chart needs at least 2/3 wide and 3 rows, so the small slot grows.
+      expect((l.left[2].span, l.left[2].rows), (2, 3));
+      // Cadence now sits in the chart's full-width, 4-row slot.
+      expect((l.right[0].span, l.right[0].rows), (3, 4));
     });
 
     test('swapped tiles keep their own sizes', () {
@@ -322,13 +372,13 @@ void main() {
       final l = standard.showInstead(TileKind.cadence, TileKind.powerNow);
       expect(allKinds(l), contains(TileKind.powerNow));
       expect(allKinds(l), isNot(contains(TileKind.cadence)));
-      expect(l.unplaced, [TileKind.cadence]);
+      expect(l.unplaced, [TileKind.cadence, TileKind.time]);
     });
 
     test('remove and add', () {
       var l = standard.remove(TileKind.speed);
       expect(allKinds(l), isNot(contains(TileKind.speed)));
-      expect(l.unplaced, [TileKind.powerNow, TileKind.speed]);
+      expect(l.unplaced, [TileKind.powerNow, TileKind.speed, TileKind.time]);
 
       l = l.add(TileKind.speed);
       expect(l.sideOf(TileKind.speed), isNotNull);
@@ -340,11 +390,14 @@ void main() {
     });
 
     test('a tile is added to the shorter side', () {
-      // Left is 5 rows tall, right 6: new tiles go left until it is taller.
+      // Both sides are 5 rows tall, so a tie goes left.
       expect(standard.add(TileKind.powerNow).sideOf(TileKind.powerNow), Side.left);
 
       final tallLeft = standard.resize(TileKind.powerAvg, rows: 6);
       expect(tallLeft.add(TileKind.powerNow).sideOf(TileKind.powerNow), Side.right);
+
+      final tallRight = standard.resize(TileKind.chart, rows: 6);
+      expect(tallRight.add(TileKind.powerNow).sideOf(TileKind.powerNow), Side.left);
     });
 
     test('an empty dashboard can have everything added back', () {
@@ -372,7 +425,7 @@ void main() {
           .moveTo(TileKind.chart, Side.left, 0)
           .moveTo(TileKind.cadence, Side.right, 1)
           .resize(TileKind.speed, span: 2, rows: 2)
-          .remove(TileKind.time);
+          .remove(TileKind.energy);
       final back = DashboardLayout.fromJson(l.toJson())!;
       expect(kinds(back.left), kinds(l.left));
       expect(kinds(back.right), kinds(l.right));

@@ -80,20 +80,24 @@ class DashboardLayout {
   final List<TileConfig> left;
   final List<TileConfig> right;
 
+  /// What you glance at and steer with on the left: power, the ERG controls
+  /// directly beneath it, then cadence, speed and heart rate. The ride so far
+  /// on the right: the chart over the distance, average power and energy
+  /// totals. The right is hidden until recording, and elapsed time lives in
+  /// the Record bar, so the Time tile is left out (it can be added back).
   static const standard = DashboardLayout(
     left: [
       TileConfig(TileKind.powerAvg, 3, 2),
+      TileConfig(TileKind.ergTarget, 3, 2),
       TileConfig(TileKind.cadence, 1, 1),
       TileConfig(TileKind.speed, 1, 1),
       TileConfig(TileKind.heartRate, 1, 1),
-      TileConfig(TileKind.time, 1, 1),
-      TileConfig(TileKind.distance, 1, 1),
-      TileConfig(TileKind.avgPower, 1, 1),
-      TileConfig(TileKind.energy, 3, 1),
     ],
     right: [
-      TileConfig(TileKind.ergTarget, 3, 2),
       TileConfig(TileKind.chart, 3, 4),
+      TileConfig(TileKind.distance, 1, 1),
+      TileConfig(TileKind.avgPower, 1, 1),
+      TileConfig(TileKind.energy, 1, 1),
     ],
   );
 

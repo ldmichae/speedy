@@ -78,37 +78,57 @@ class WorkoutBar extends ConsumerWidget {
     final c = ref.read(recorderProvider.notifier);
     final theme = Theme.of(context);
 
+    // 48 px high: the controls you reach for mid-ride. Space does the same as
+    // Record, Pause and Resume.
+    const size = Size(0, 48);
+    final fill = FilledButton.styleFrom(minimumSize: size);
+    final outline = OutlinedButton.styleFrom(minimumSize: size);
+
+    Widget stop() => Tooltip(
+          message: 'Stop and save or discard',
+          child: OutlinedButton.icon(
+            style: outline,
+            onPressed: () => _stop(context, ref),
+            icon: const Icon(Icons.stop),
+            label: const Text('Stop'),
+          ),
+        );
+
     final controls = switch (rec.status) {
       RecStatus.idle => [
-          FilledButton.icon(
-            onPressed: c.start,
-            icon: const Icon(Icons.fiber_manual_record),
-            label: const Text('Record'),
+          Tooltip(
+            message: 'Start recording (Space)',
+            child: FilledButton.icon(
+              style: fill,
+              onPressed: c.start,
+              icon: const Icon(Icons.fiber_manual_record),
+              label: const Text('Record'),
+            ),
           ),
         ],
       RecStatus.recording => [
-          FilledButton.tonalIcon(
-            onPressed: c.pause,
-            icon: const Icon(Icons.pause),
-            label: const Text('Pause'),
+          Tooltip(
+            message: 'Pause (Space)',
+            child: FilledButton.tonalIcon(
+              style: fill,
+              onPressed: c.pause,
+              icon: const Icon(Icons.pause),
+              label: const Text('Pause'),
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => _stop(context, ref),
-            icon: const Icon(Icons.stop),
-            label: const Text('Stop'),
-          ),
+          stop(),
         ],
       RecStatus.paused => [
-          FilledButton.icon(
-            onPressed: c.resume,
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Resume'),
+          Tooltip(
+            message: 'Resume (Space)',
+            child: FilledButton.icon(
+              style: fill,
+              onPressed: c.resume,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Resume'),
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => _stop(context, ref),
-            icon: const Icon(Icons.stop),
-            label: const Text('Stop'),
-          ),
+          stop(),
         ],
     };
 
@@ -128,7 +148,11 @@ class WorkoutBar extends ConsumerWidget {
               RecStatus.paused => 'Paused  ${clock(rec.elapsed)}',
               RecStatus.recording => clock(rec.elapsed),
             },
-            style: theme.textTheme.titleMedium,
+            style: rec.status == RecStatus.idle
+                ? theme.textTheme.titleMedium
+                : theme.textTheme.titleLarge?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
           ),
           const Spacer(),
           Wrap(spacing: 8, children: controls),

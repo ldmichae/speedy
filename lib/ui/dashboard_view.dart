@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -21,6 +22,10 @@ class DashboardView extends ConsumerStatefulWidget {
 class _DashboardViewState extends ConsumerState<DashboardView> {
   bool _editing = false;
 
+  /// Holds focus for the keyboard shortcuts, and gets it back after every
+  /// click, so Space never re-presses whichever button was clicked last.
+  final _focus = FocusNode(debugLabel: 'dashboard shortcuts');
+
   @override
   void initState() {
     super.initState();
@@ -30,15 +35,57 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
 
   @override
   void dispose() {
+    _focus.dispose();
     WakelockPlus.disable().catchError((_) {});
     super.dispose();
+  }
+
+  /// Keys act only while this screen is on top, not under a dialog or another
+  /// screen such as Preferences.
+  VoidCallback _guarded(VoidCallback f) => () {
+        if (ModalRoute.of(context)?.isCurrent ?? true) f();
+      };
+
+  void _toggleRecording() {
+    final recorder = ref.read(recorderProvider.notifier);
+    switch (ref.read(recorderProvider).status) {
+      case RecStatus.idle:
+        recorder.start();
+      case RecStatus.recording:
+        recorder.pause();
+      case RecStatus.paused:
+        recorder.resume();
+    }
+  }
+
+  /// Disconnecting mid-ride pauses the recording, so it asks first.
+  Future<void> _disconnect() async {
+    if (ref.read(recorderProvider).status != RecStatus.idle) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Disconnect the trainer?'),
+          content: const Text('Your recording pauses. You can reconnect and resume it.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep riding')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Disconnect')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await ref.read(trainerControllerProvider.notifier).disconnect();
   }
 
   @override
   Widget build(BuildContext context) {
     final deviceName = ref.watch(trainerControllerProvider.select((s) => s.deviceName));
     final error = ref.watch(trainerControllerProvider.select((s) => s.error));
-    final c = ref.read(trainerControllerProvider.notifier);
+    final trainer = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
     final active = ref.watch(
         recorderProvider.select((r) => r.status != RecStatus.idle));
@@ -59,8 +106,11 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           icon: const Icon(Icons.dashboard_customize_outlined),
           label: const Text('Edit layout'),
         ),
+      // Set apart from Edit layout, in the error colour, since it ends the ride.
+      const SizedBox(width: 12),
       TextButton.icon(
-        onPressed: c.disconnect,
+        style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+        onPressed: _disconnect,
         icon: const Icon(Icons.link_off),
         label: const Text('Disconnect'),
       ),
@@ -77,7 +127,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         DashboardGrid(editing: _editing, compact: compact),
       ]);
 
-      return ListView(
+      final content = ListView(
         padding: const EdgeInsets.all(16),
         children: [
           deviceRow,
@@ -102,6 +152,35 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             Text(error, style: TextStyle(color: theme.colorScheme.error)),
           ],
         ],
+      );
+
+      // Keyboard: Space records, pauses or resumes; the arrow keys move the
+      // ERG target by 5 W (25 W with Shift). Off while arranging tiles.
+      return CallbackShortcuts(
+        bindings: _editing
+            ? const {}
+            : {
+                const SingleActivator(LogicalKeyboardKey.space): _guarded(_toggleRecording),
+                const SingleActivator(LogicalKeyboardKey.arrowUp): _guarded(() =>
+                    trainer.adjustTarget(5)),
+                const SingleActivator(LogicalKeyboardKey.arrowDown): _guarded(() =>
+                    trainer.adjustTarget(-5)),
+                const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): _guarded(() =>
+                    trainer.adjustTarget(25)),
+                const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): _guarded(() =>
+                    trainer.adjustTarget(-25)),
+              },
+        child: Focus(
+          focusNode: _focus,
+          autofocus: true,
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerUp: (_) => WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _focus.requestFocus();
+            }),
+            child: content,
+          ),
+        ),
       );
     });
   }
@@ -128,8 +207,8 @@ class _EditToolbar extends ConsumerWidget {
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text('Drag a tile onto another to reorder. Use the gear to '
-                'resize it or change what it shows.'),
+            const Text('Drag tiles to rearrange. The gear resizes a tile or '
+                'changes what it shows.'),
             PopupMenuButton<TileKind>(
               enabled: unplaced.isNotEmpty,
               tooltip: unplaced.isEmpty ? 'Everything is already on the dashboard' : 'Add tile',

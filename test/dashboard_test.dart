@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/dashboard_layout.dart';
 import 'package:indoor_cycling/core/ride_recording.dart';
+import 'package:indoor_cycling/core/rider_profile.dart';
 import 'package:indoor_cycling/devices/trainer.dart';
 import 'package:indoor_cycling/ui/dashboard_layout_controller.dart';
+import 'package:indoor_cycling/ui/dashboard_tiles.dart';
 import 'package:indoor_cycling/ui/dashboard_view.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/recording_panel.dart';
 import 'package:indoor_cycling/ui/ride_chart.dart';
+import 'package:indoor_cycling/ui/rider_profile_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -56,6 +60,10 @@ Rect rect(WidgetTester t, TileKind k) => t.getRect(tile(k));
 DashboardLayout layoutOf(ProviderContainer c) => c.read(dashboardLayoutProvider);
 List<TileKind> leftOf(ProviderContainer c) => [for (final t in layoutOf(c).left) t.kind];
 List<TileKind> rightOf(ProviderContainer c) => [for (final t in layoutOf(c).right) t.kind];
+int targetOf(ProviderContainer c) => c.read(trainerControllerProvider).targetWatts;
+RecStatus recStatus(ProviderContainer c) => c.read(recorderProvider).status;
+
+const hint = 'Your ride shows up here';
 
 Future<void> record(WidgetTester tester) async {
   await tester.tap(find.text('Record'));
@@ -90,42 +98,55 @@ void expectNoTileOverlap(WidgetTester tester, Iterable<TileKind> kinds) {
   }
 }
 
+/// The simulated trainer's streams live in the real-time zone, so a
+/// disconnect only finishes once real time passes.
+Future<void> settleDisconnect(WidgetTester tester) async {
+  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
+  await tester.pumpAndSettle();
+}
+
+Future<void> key(WidgetTester tester, LogicalKeyboardKey k, {bool shift = false}) async {
+  if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.sendKeyEvent(k);
+  if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.pump();
+}
+
 void main() {
   group('tiles and recording', () {
-    testWidgets('before recording: live tiles and ERG target, no totals or chart',
+    testWidgets('before recording: live tiles and the ERG controls, no totals or chart',
         (tester) async {
       await openDashboard(tester);
 
       expect(find.text('Ready to ride'), findsOneWidget);
       for (final k in [
         TileKind.powerAvg,
+        TileKind.ergTarget,
         TileKind.cadence,
         TileKind.speed,
         TileKind.heartRate,
-        TileKind.ergTarget,
       ]) {
         expect(tile(k), findsOneWidget, reason: k.name);
       }
       for (final k in [
-        TileKind.time,
         TileKind.distance,
         TileKind.avgPower,
         TileKind.energy,
         TileKind.chart,
+        TileKind.time,
       ]) {
         expect(tile(k), findsNothing, reason: k.name);
       }
       expect(find.byType(RideChart), findsNothing);
     });
 
-    testWidgets('recording reveals totals incl. distance, and the chart',
+    testWidgets('recording reveals distance, average power, energy and the chart',
         (tester) async {
       final c = await openDashboard(tester);
       await record(tester);
 
-      expect(c.read(recorderProvider).status, RecStatus.recording);
+      expect(recStatus(c), RecStatus.recording);
       for (final k in [
-        TileKind.time,
         TileKind.distance,
         TileKind.avgPower,
         TileKind.energy,
@@ -133,6 +154,7 @@ void main() {
       ]) {
         expect(tile(k), findsOneWidget, reason: k.name);
       }
+      expect(tile(TileKind.time), findsNothing); // the bar owns elapsed time
       expect(find.byType(RideChart), findsOneWidget);
       expect(find.text('Pause'), findsOneWidget);
 
@@ -149,7 +171,7 @@ void main() {
       await tester.tap(find.text('Discard'));
       await tester.pumpAndSettle();
 
-      expect(c.read(recorderProvider).status, RecStatus.idle);
+      expect(recStatus(c), RecStatus.idle);
       expect(tile(TileKind.chart), findsNothing);
       expect(tile(TileKind.distance), findsNothing);
       expect(find.text('Ready to ride'), findsOneWidget);
@@ -162,7 +184,7 @@ void main() {
       await tester.tap(find.text('Pause'));
       await tester.pump();
 
-      expect(c.read(recorderProvider).status, RecStatus.paused);
+      expect(recStatus(c), RecStatus.paused);
       expect(tile(TileKind.chart), findsOneWidget);
       expect(find.text('Resume'), findsOneWidget);
 
@@ -181,20 +203,314 @@ void main() {
       await stopRecording(tester, c);
     });
 
-    testWidgets('the ERG buttons still change the target', (tester) async {
+    testWidgets('the bar\'s buttons are at least 48 px tall', (tester) async {
       final c = await openDashboard(tester);
-      expect(c.read(trainerControllerProvider).targetWatts, 100);
+      expect(tester.getSize(find.widgetWithText(FilledButton, 'Record')).height,
+          greaterThanOrEqualTo(48));
+
+      await record(tester);
+      expect(tester.getSize(find.widgetWithText(FilledButton, 'Pause')).height,
+          greaterThanOrEqualTo(48));
+      expect(tester.getSize(find.widgetWithText(OutlinedButton, 'Stop')).height,
+          greaterThanOrEqualTo(48));
+      await stopRecording(tester, c);
+    });
+  });
+
+  group('power tile and ERG controls', () {
+    testWidgets('the power tile carries the target and how far off it is',
+        (tester) async {
+      await openDashboard(tester);
+
+      expect(find.text('Target 100 W'), findsOneWidget);
+      // The simulated trainer is still warming up, well under 100 W.
+      expect(find.descendant(of: tile(TileKind.powerAvg), matching: find.byType(TargetChip)),
+          findsOneWidget);
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+    });
+
+    testWidgets('the target on the power tile follows the ERG buttons',
+        (tester) async {
+      await openDashboard(tester);
 
       await tester.tap(find.text('+25'));
       await tester.pump();
 
-      expect(c.read(trainerControllerProvider).targetWatts, 125);
-      expect(find.text('125 W'), findsOneWidget);
+      expect(find.text('Target 125 W'), findsOneWidget);
+      expect(find.text('Target 100 W'), findsNothing);
+    });
+
+    testWidgets('the ERG tile is controls: big equal buttons and the value being set',
+        (tester) async {
+      final c = await openDashboard(tester);
+
+      for (final label in ['−25', '−10', '−5', '+5', '+10', '+25']) {
+        final size = tester.getSize(find.widgetWithText(FilledButton, label));
+        expect(size.height, greaterThanOrEqualTo(56), reason: label);
+      }
+      final widths = {
+        for (final label in ['−25', '−10', '−5', '+5', '+10', '+25'])
+          tester.getSize(find.widgetWithText(FilledButton, label)).width.round()
+      };
+      expect(widths, hasLength(1)); // equal width
+      expect(find.descendant(of: tile(TileKind.ergTarget), matching: find.text('100 W')),
+          findsOneWidget);
+
+      await tester.tap(find.text('−10'));
+      await tester.pump();
+      expect(targetOf(c), 90);
+      expect(find.descendant(of: tile(TileKind.ergTarget), matching: find.text('90 W')),
+          findsOneWidget);
+    });
+
+    testWidgets('on phone width the controls are on the first screen under power',
+        (tester) async {
+      await openDashboard(tester, size: const Size(480, 1000));
+
+      final power = rect(tester, TileKind.powerAvg);
+      final erg = rect(tester, TileKind.ergTarget);
+      expect(erg.top, closeTo(power.bottom + 12, 0.5)); // directly beneath
+      expect(erg.bottom, lessThan(1000)); // no scrolling to change the target
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the ERG buttons still change the target', (tester) async {
+      final c = await openDashboard(tester);
+      await tester.tap(find.text('+25'));
+      await tester.pump();
+      expect(targetOf(c), 125);
+    });
+  });
+
+  group('blank tiles say why', () {
+    testWidgets('heart rate without a sensor says so', (tester) async {
+      await openDashboard(tester);
+      expect(find.descendant(of: tile(TileKind.heartRate), matching: find.text('No sensor')),
+          findsOneWidget);
+    });
+
+    testWidgets('energy without a rider profile says what is missing',
+        (tester) async {
+      final c = await openDashboard(tester);
+      await record(tester);
+
+      expect(find.descendant(of: tile(TileKind.energy), matching: find.text('Add profile')),
+          findsOneWidget);
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('with a complete profile the note goes away', (tester) async {
+      final c = await openDashboard(tester);
+      c.read(riderProfileProvider.notifier).update(const RiderProfile(
+          heightCm: 180, weightKg: 75, age: 30, sex: Sex.male));
+      await record(tester);
+
+      expect(find.text('Add profile'), findsNothing);
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('an empty right side explains what will appear there',
+        (tester) async {
+      await openDashboard(tester, size: desktop);
+      expect(find.text(hint), findsOneWidget);
+      expect(find.textContaining('once you press Record'), findsOneWidget);
+    });
+
+    testWidgets('the explanation is gone once recording, and while editing',
+        (tester) async {
+      final c = await openDashboard(tester, size: desktop);
+      await record(tester);
+      expect(find.text(hint), findsNothing);
+      await stopRecording(tester, c);
+
+      await startEditing(tester);
+      expect(find.text(hint), findsNothing);
+      expect(tile(TileKind.chart), findsOneWidget); // the real tiles instead
+    });
+
+  });
+
+  group('keyboard', () {
+    testWidgets('Space starts, pauses and resumes the recording', (tester) async {
+      final c = await openDashboard(tester);
+      expect(recStatus(c), RecStatus.idle);
+
+      await key(tester, LogicalKeyboardKey.space);
+      expect(recStatus(c), RecStatus.recording);
+      await key(tester, LogicalKeyboardKey.space);
+      expect(recStatus(c), RecStatus.paused);
+      await key(tester, LogicalKeyboardKey.space);
+      expect(recStatus(c), RecStatus.recording);
+
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('arrow keys move the target by 5 W, Shift by 25 W', (tester) async {
+      final c = await openDashboard(tester);
+
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      expect(targetOf(c), 105);
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      expect(targetOf(c), 95);
+      await key(tester, LogicalKeyboardKey.arrowUp, shift: true);
+      expect(targetOf(c), 120);
+      await key(tester, LogicalKeyboardKey.arrowDown, shift: true);
+      expect(targetOf(c), 95);
+    });
+
+    testWidgets('keys do nothing while arranging tiles', (tester) async {
+      final c = await openDashboard(tester);
+      await startEditing(tester);
+
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      await key(tester, LogicalKeyboardKey.space);
+
+      expect(targetOf(c), 100);
+      expect(recStatus(c), RecStatus.idle);
+    });
+
+    testWidgets('after clicking a button, Space is not that button\'s press again',
+        (tester) async {
+      final c = await openDashboard(tester);
+
+      await tester.tap(find.text('+5'));
+      await tester.pumpAndSettle();
+      expect(targetOf(c), 105);
+
+      await key(tester, LogicalKeyboardKey.space);
+
+      expect(recStatus(c), RecStatus.recording); // Space did the bar's job
+      expect(targetOf(c), 105); // and did not press +5 a second time
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('arrow keys do not reach the dashboard through an open dialog',
+        (tester) async {
+      final c = await openDashboard(tester);
+      await record(tester);
+      await tester.tap(find.text('Stop'));
+      await tester.pumpAndSettle();
+      expect(find.text('End ride?'), findsOneWidget);
+
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      expect(targetOf(c), 100);
+
+      await tester.tap(find.text('Keep riding'));
+      await tester.pumpAndSettle();
+      await stopRecording(tester, c);
+    });
+
+  });
+
+  group('Disconnect', () {
+    testWidgets('disconnects straight away when not recording', (tester) async {
+      final c = await openDashboard(tester);
+
+      await tester.tap(find.text('Disconnect'));
+      await settleDisconnect(tester);
+
+      expect(find.text('Disconnect the trainer?'), findsNothing);
+      expect(c.read(trainerControllerProvider).status, TrainerStatus.disconnected);
+    });
+
+    testWidgets('asks first mid-ride; Keep riding leaves everything running',
+        (tester) async {
+      final c = await openDashboard(tester);
+      await record(tester);
+
+      await tester.tap(find.text('Disconnect'));
+      await tester.pumpAndSettle();
+      expect(find.text('Disconnect the trainer?'), findsOneWidget);
+      expect(find.textContaining('recording pauses'), findsOneWidget);
+
+      await tester.tap(find.text('Keep riding'));
+      await tester.pumpAndSettle();
+
+      expect(c.read(trainerControllerProvider).status, TrainerStatus.connected);
+      expect(recStatus(c), RecStatus.recording);
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('confirming mid-ride disconnects and pauses the recording',
+        (tester) async {
+      final c = await openDashboard(tester);
+      await record(tester);
+
+      await tester.tap(find.text('Disconnect'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Disconnect'));
+      await settleDisconnect(tester);
+
+      expect(c.read(trainerControllerProvider).status, TrainerStatus.disconnected);
+      expect(recStatus(c), RecStatus.paused); // kept, not lost
+      expect(c.read(recorderProvider).samples, isNotEmpty);
+      await stopRecording(tester, c);
+    });
+  });
+
+  group('chart controls', () {
+    Finder inOptions(Finder f) =>
+        find.descendant(of: find.byType(ChartOptions), matching: f);
+
+    testWidgets('are one compact block, not two rows of chunky chips',
+        (tester) async {
+      final c = await openDashboard(tester, size: desktop);
+      await record(tester);
+
+      final size = tester.getSize(find.byType(ChartOptions));
+      expect(size.height, lessThanOrEqualTo(80));
+      expect(tester.getSize(tile(TileKind.chart)).height, greaterThan(size.height * 4));
+      expect(find.byType(FilterChip), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('tapping a series in the legend shows or hides it', (tester) async {
+      final c = await openDashboard(tester, size: desktop);
+      await record(tester);
+      expect(c.read(chartSettingsProvider).visible, contains(RideMetric.cadence));
+
+      await tester.tap(inOptions(find.text('Cadence')));
+      await tester.pump();
+      expect(c.read(chartSettingsProvider).visible, isNot(contains(RideMetric.cadence)));
+
+      await tester.tap(inOptions(find.text('Cadence')));
+      await tester.pump();
+      expect(c.read(chartSettingsProvider).visible, contains(RideMetric.cadence));
+      await stopRecording(tester, c);
+    });
+
+    testWidgets('the time window is a menu, defaulting to the whole ride',
+        (tester) async {
+      final c = await openDashboard(tester, size: desktop);
+      await record(tester);
+      expect(inOptions(find.text('Whole ride')), findsOneWidget);
+      expect(find.text('Last 5 min'), findsNothing); // tucked away until opened
+
+      await tester.tap(inOptions(find.text('Whole ride')));
+      await tester.pumpAndSettle();
+      expect(find.text('Last 5 min'), findsOneWidget);
+      expect(find.text('Last 10 min'), findsOneWidget);
+      expect(find.text('Last 20 min'), findsOneWidget);
+
+      await tester.tap(find.text('Last 5 min'));
+      await tester.pumpAndSettle();
+
+      expect(c.read(chartSettingsProvider).window, const Duration(minutes: 5));
+      expect(inOptions(find.text('Last 5 min')), findsOneWidget);
+
+      await tester.tap(inOptions(find.text('Last 5 min')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Whole ride').last);
+      await tester.pumpAndSettle();
+      expect(c.read(chartSettingsProvider).window, isNull);
+      await stopRecording(tester, c);
     });
   });
 
   group('stacked layout (narrow window)', () {
-    testWidgets('reads top to bottom: bar, left side, then right side',
+    testWidgets('reads top to bottom: bar, power, ERG, small tiles, chart, totals',
         (tester) async {
       final c = await openDashboard(tester);
       await record(tester);
@@ -203,11 +519,10 @@ void main() {
       final tops = [
         top(find.byType(WorkoutBar)),
         top(tile(TileKind.powerAvg)),
+        top(tile(TileKind.ergTarget)),
         top(tile(TileKind.cadence)),
-        top(tile(TileKind.time)),
-        top(tile(TileKind.energy)),
-        top(tile(TileKind.ergTarget)), // the right side starts below the left
-        top(tile(TileKind.chart)),
+        top(tile(TileKind.chart)), // the right side starts below the left
+        top(tile(TileKind.distance)),
       ];
       for (var i = 1; i < tops.length; i++) {
         expect(tops[i], greaterThan(tops[i - 1]), reason: 'item $i');
@@ -222,19 +537,14 @@ void main() {
       await record(tester);
 
       final bar = tester.getRect(find.byType(WorkoutBar));
-      for (final k in [
-        TileKind.powerAvg,
-        TileKind.energy,
-        TileKind.ergTarget,
-        TileKind.chart,
-      ]) {
+      for (final k in [TileKind.powerAvg, TileKind.ergTarget, TileKind.chart]) {
         final r = rect(tester, k);
         expect(r.left, closeTo(bar.left, 0.5), reason: k.name);
         expect(r.width, closeTo(bar.width, 0.5), reason: k.name);
       }
       for (final row in [
         [TileKind.cadence, TileKind.speed, TileKind.heartRate],
-        [TileKind.time, TileKind.distance, TileKind.avgPower],
+        [TileKind.distance, TileKind.avgPower, TileKind.energy],
       ]) {
         final r = [for (final k in row) rect(tester, k)];
         expect(r.first.left, closeTo(bar.left, 0.5));
@@ -248,7 +558,7 @@ void main() {
   });
 
   group('wide layout (desktop): two sides', () {
-    testWidgets('left and right sides share the width and the top',
+    testWidgets('power over the ERG controls on the left, chart over totals on the right',
         (tester) async {
       final c = await openDashboard(tester, size: desktop);
       await record(tester);
@@ -257,14 +567,19 @@ void main() {
       final power = rect(tester, TileKind.powerAvg);
       final erg = rect(tester, TileKind.ergTarget);
       final chart = rect(tester, TileKind.chart);
+      final distance = rect(tester, TileKind.distance);
+      final cadence = rect(tester, TileKind.cadence);
 
       expect(power.left, closeTo(bar.left, 0.5));
       expect(chart.right, closeTo(bar.right, 0.5));
       expect(power.width, closeTo(chart.width, 0.5)); // equal halves
-      expect(erg.left, closeTo(chart.left, 0.5)); // one right-hand column
-      expect(erg.top, closeTo(power.top, 0.5)); // both sides start at the top
       expect(chart.left - power.right, closeTo(16, 0.5)); // the gutter
-      expect(erg.bottom + 12, closeTo(chart.top, 0.5)); // chart under the ERG
+      expect(chart.top, closeTo(power.top, 0.5)); // both sides start at the top
+      expect(erg.left, closeTo(power.left, 0.5));
+      expect(erg.top, closeTo(power.bottom + 12, 0.5)); // ERG directly under power
+      expect(distance.top, closeTo(chart.bottom + 12, 0.5));
+      // The sides end together, so neither leaves a hole.
+      expect(cadence.bottom, closeTo(distance.bottom, 0.5));
       expect(tester.takeException(), isNull);
       await stopRecording(tester, c);
     });
@@ -273,26 +588,27 @@ void main() {
       final c = await openDashboard(tester, size: desktop);
       await record(tester);
 
-      final left = [
+      final small = [
         for (final k in [TileKind.cadence, TileKind.speed, TileKind.heartRate])
           rect(tester, k)
       ];
       final side = rect(tester, TileKind.powerAvg);
-      expect(left.first.left, closeTo(side.left, 0.5));
-      expect(left.last.right, closeTo(side.right, 0.5));
+      expect(small.first.left, closeTo(side.left, 0.5));
+      expect(small.last.right, closeTo(side.right, 0.5));
       // Three tiles across the side, not the window.
-      expect(left[0].width, closeTo((side.width - 24) / 3, 0.5));
+      expect(small[0].width, closeTo((side.width - 24) / 3, 0.5));
       await stopRecording(tester, c);
     });
 
-    testWidgets('before recording, the ERG target is the right side\'s only tile',
+    testWidgets('before recording the right half holds the explanation, level with power',
         (tester) async {
       await openDashboard(tester, size: desktop);
 
       final power = rect(tester, TileKind.powerAvg);
-      final erg = rect(tester, TileKind.ergTarget);
-      expect(erg.left, greaterThan(power.right));
-      expect(erg.top, closeTo(power.top, 0.5));
+      final hintRect = tester.getRect(find.ancestor(
+          of: find.text(hint), matching: find.byType(Card)).first);
+      expect(hintRect.left, greaterThan(power.right));
+      expect(hintRect.top, closeTo(power.top, 0.5));
       expect(tester.takeException(), isNull);
     });
 
@@ -344,7 +660,7 @@ void main() {
       await tester.tap(find.text('+25'), warnIfMissed: false);
       await tester.pump();
 
-      expect(c.read(trainerControllerProvider).targetWatts, 100);
+      expect(targetOf(c), 100);
     });
 
     testWidgets('resize a tile from its settings', (tester) async {
@@ -388,7 +704,7 @@ void main() {
         (tester) async {
       final c = await openDashboard(tester);
       await startEditing(tester);
-      expect(leftOf(c).sublist(1, 4),
+      expect(leftOf(c).sublist(2, 5),
           [TileKind.cadence, TileKind.speed, TileKind.heartRate]);
 
       await openSettings(tester, TileKind.cadence);
@@ -397,7 +713,7 @@ void main() {
       await tester.tap(find.text('Speed').last);
       await tester.pumpAndSettle();
 
-      expect(leftOf(c).sublist(1, 4),
+      expect(leftOf(c).sublist(2, 5),
           [TileKind.speed, TileKind.cadence, TileKind.heartRate]);
       expect(layoutOf(c).all.map((t) => t.kind).toSet(),
           hasLength(layoutOf(c).all.length)); // no repeats
@@ -414,10 +730,10 @@ void main() {
       await openSettings(tester, TileKind.cadence);
       await tester.tap(find.byType(DropdownButton<TileKind>));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ERG target').last);
+      await tester.tap(find.text('Chart').last);
       await tester.pumpAndSettle();
 
-      expect(layoutOf(c).sideOf(TileKind.ergTarget), Side.left);
+      expect(layoutOf(c).sideOf(TileKind.chart), Side.left);
       expect(layoutOf(c).sideOf(TileKind.cadence), Side.right);
       expect(tester.takeException(), isNull);
     });
@@ -454,16 +770,32 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tile(TileKind.cadence), findsOneWidget);
-      // Added to the shorter side, which is the left (5 rows against 6).
+      // Both sides are 5 rows tall, so it goes to the left.
       expect(layoutOf(c).sideOf(TileKind.cadence), Side.left);
       expect(leftOf(c).last, TileKind.cadence);
+    });
+
+    testWidgets('the Time tile is available to add, since it is not on by default',
+        (tester) async {
+      final c = await openDashboard(tester);
+      await startEditing(tester);
+
+      await tester.tap(find.text('Add tile'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Time').last);
+      await tester.pumpAndSettle();
+
+      expect(layoutOf(c).sideOf(TileKind.time), isNotNull);
+      expect(tile(TileKind.time), findsOneWidget);
     });
 
     testWidgets('Add tile is disabled when everything is already placed',
         (tester) async {
       final c = await openDashboard(tester);
       await startEditing(tester);
-      c.read(dashboardLayoutProvider.notifier).add(TileKind.powerNow);
+      c.read(dashboardLayoutProvider.notifier)
+        ..add(TileKind.powerNow)
+        ..add(TileKind.time);
       await tester.pump();
 
       final menu = tester.widget<PopupMenuButton<TileKind>>(
@@ -511,7 +843,7 @@ void main() {
         await dragCorner(tester, g, grabbed, cad.topLeft); // onto cadence's slot
 
         // Nothing is saved yet, but the grid already shows the result:
-        expect(leftOf(c).sublist(1, 4),
+        expect(leftOf(c).sublist(2, 5),
             [TileKind.cadence, TileKind.speed, TileKind.heartRate]);
         expect(rect(tester, TileKind.heartRate).topLeft, cad.topLeft);
         expect(rect(tester, TileKind.cadence).left, closeTo(speed.left, 0.5));
@@ -521,7 +853,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Dropping commits exactly what was previewed.
-        expect(leftOf(c).sublist(1, 4),
+        expect(leftOf(c).sublist(2, 5),
             [TileKind.heartRate, TileKind.cadence, TileKind.speed]);
         expect(rect(tester, TileKind.heartRate).topLeft, cad.topLeft);
         expect(rect(tester, TileKind.cadence).left, closeTo(speed.left, 0.5));
@@ -555,45 +887,45 @@ void main() {
         }
       });
 
-      testWidgets('dropping in the open space below puts the tile last on that side',
+      testWidgets('dropping beneath a side lands in its last row, at the drop column',
           (tester) async {
         final c = await openDashboard(tester);
         await startEditing(tester);
-        final last = rect(tester, leftOf(c).last);
-        final left = rect(tester, TileKind.powerAvg).left;
+        final power = rect(tester, TileKind.powerAvg);
+        final lastRow = rect(tester, TileKind.cadence); // the three small tiles
 
-        final (g, grabbed) = await grab(tester, TileKind.cadence);
-        await dragCorner(tester, g, grabbed, Offset(left, last.bottom + 24));
+        final (g, grabbed) = await grab(tester, TileKind.heartRate);
+        await dragCorner(tester, g, grabbed, Offset(power.left, lastRow.bottom + 24));
         await g.up();
         await tester.pumpAndSettle();
 
-        expect(leftOf(c).last, TileKind.cadence);
-        expect(rect(tester, TileKind.cadence).top, greaterThan(last.bottom - 1));
+        // Heart rate takes the first slot of the last row; the others move on.
+        expect(leftOf(c).sublist(2, 5),
+            [TileKind.heartRate, TileKind.cadence, TileKind.speed]);
+        expect(rect(tester, TileKind.heartRate).left, closeTo(power.left, 0.5));
+        expect(rect(tester, TileKind.heartRate).top, closeTo(lastRow.top, 0.5));
       });
 
       testWidgets('a tile can be dragged to the other side', (tester) async {
         final c = await openDashboard(tester, size: desktop);
         await startEditing(tester);
-        final power = rect(tester, TileKind.powerAvg);
-        final chartBefore = rect(tester, TileKind.chart);
         final cad = rect(tester, TileKind.cadence);
+        final avgPower = rect(tester, TileKind.avgPower);
 
-        final (g, grabbed) = await grab(tester, TileKind.ergTarget);
+        final (g, grabbed) = await grab(tester, TileKind.avgPower);
         await dragCorner(tester, g, grabbed, cad.topLeft); // onto the left side
 
         // The preview already shows it moved: the right side closes up.
-        expect(rect(tester, TileKind.chart).top, closeTo(power.top, 0.5));
-        expect(rect(tester, TileKind.chart).top, lessThan(chartBefore.top));
-        expect(rect(tester, TileKind.ergTarget).left, lessThan(power.right));
-        expect(layoutOf(c).sideOf(TileKind.ergTarget), Side.right); // not saved yet
+        expect(rect(tester, TileKind.energy).left, closeTo(avgPower.left, 0.5));
+        expect(layoutOf(c).sideOf(TileKind.avgPower), Side.right); // not saved yet
 
         await g.up();
         await tester.pumpAndSettle();
 
-        expect(layoutOf(c).sideOf(TileKind.ergTarget), Side.left);
-        expect(leftOf(c).indexOf(TileKind.ergTarget), 1); // straight after power
-        expect(rightOf(c), [TileKind.chart]);
-        expect(rect(tester, TileKind.ergTarget).left, closeTo(power.left, 0.5));
+        expect(layoutOf(c).sideOf(TileKind.avgPower), Side.left);
+        expect(leftOf(c).indexOf(TileKind.avgPower), 2); // just under the ERG controls
+        expect(rightOf(c), [TileKind.chart, TileKind.distance, TileKind.energy]);
+        expect(rect(tester, TileKind.avgPower).topLeft, cad.topLeft);
         expectNoTileOverlap(tester, layoutOf(c).all.map((t) => t.kind));
         expect(tester.takeException(), isNull);
       });
@@ -604,39 +936,41 @@ void main() {
         final c = await openDashboard(tester, size: desktop);
         await startEditing(tester);
 
-        final (g, grabbed) = await grab(tester, TileKind.ergTarget);
+        final (g, grabbed) = await grab(tester, TileKind.avgPower);
         await dragCorner(
             tester, g, grabbed, rect(tester, TileKind.cadence).topLeft);
         await g.up();
         await tester.pumpAndSettle();
 
-        await openSettings(tester, TileKind.ergTarget); // gear still works
+        await openSettings(tester, TileKind.avgPower); // gear still works
         expect(find.byType(AlertDialog), findsOneWidget);
         await tester.tap(find.text('Done').last);
         await tester.pumpAndSettle();
 
-        // And it can be dragged again.
-        final (g2, grabbed2) = await grab(tester, TileKind.ergTarget);
+        // And it can be dragged again, back to the right.
+        final (g2, grabbed2) = await grab(tester, TileKind.avgPower);
         await dragCorner(
             tester, g2, grabbed2, rect(tester, TileKind.chart).topLeft);
         await g2.up();
         await tester.pumpAndSettle();
-        expect(layoutOf(c).sideOf(TileKind.ergTarget), Side.right);
+        expect(layoutOf(c).sideOf(TileKind.avgPower), Side.right);
       });
 
-      testWidgets('dropping below the other side\'s tiles puts it last there',
+      testWidgets('dropping below a full last row on the other side starts a new row',
           (tester) async {
         final c = await openDashboard(tester, size: desktop);
         await startEditing(tester);
         final chart = rect(tester, TileKind.chart);
+        final lastRow = rect(tester, TileKind.energy); // distance / avg / energy
 
         final (g, grabbed) = await grab(tester, TileKind.cadence);
-        await dragCorner(tester, g, grabbed, Offset(chart.left, chart.bottom + 24));
+        await dragCorner(tester, g, grabbed, Offset(chart.left, lastRow.bottom + 24));
         await g.up();
         await tester.pumpAndSettle();
 
         expect(layoutOf(c).sideOf(TileKind.cadence), Side.right);
         expect(rightOf(c).last, TileKind.cadence);
+        expect(rect(tester, TileKind.cadence).top, greaterThan(lastRow.bottom - 1));
         expect(leftOf(c), isNot(contains(TileKind.cadence)));
       });
 

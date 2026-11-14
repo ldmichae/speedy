@@ -269,8 +269,15 @@ class _RideChartPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
       final path = Path();
       double? prevY;
-      for (final s in visible) {
-        final v = m.valueOf(s, system);
+      // Cadence and speed jitter from reading to reading; drawn raw they
+      // swamp the plot, so they are averaged over a few seconds.
+      final values = smoothSeries(
+        visible,
+        [for (final s in visible) m.valueOf(s, system)],
+        m.smoothSeconds,
+      );
+      for (final (i, s) in visible.indexed) {
+        final v = values[i];
         if (v == null) {
           prevY = null;
           continue;
@@ -427,11 +434,12 @@ enum RideMetric {
   target('ERG target', 'W', Color(0xFFF59E0B), step: true),
   power('Power', 'W', Color(0xFF3B82F6)),
   smoothedPower('Power (3 s)', 'W', Color(0xFF6366F1)),
-  cadence('Cadence', 'rpm', Color(0xFF10B981)),
-  speed('Speed', 'km/h', Color(0xFFA855F7)),
+  cadence('Cadence', 'rpm', Color(0xFF10B981), smoothSeconds: 5),
+  speed('Speed', 'km/h', Color(0xFFA855F7), smoothSeconds: 5),
   heartRate('Heart rate', 'bpm', Color(0xFFEF4444));
 
-  const RideMetric(this.label, this.unit, this.color, {this.step = false});
+  const RideMetric(this.label, this.unit, this.color,
+      {this.step = false, this.smoothSeconds = 0});
 
   final String label;
   final String unit;
@@ -439,6 +447,10 @@ enum RideMetric {
 
   /// Drawn as a staircase (value holds until it changes) instead of a slope.
   final bool step;
+
+  /// The chart draws a moving average over this many seconds (0 = raw).
+  /// Tooltips still report the actual reading.
+  final double smoothSeconds;
 
   /// [unit] is the metric unit; only speed changes with [UnitSystem].
   String unitIn(UnitSystem u) => this == RideMetric.speed ? speedUnit(u) : unit;
@@ -455,50 +467,168 @@ enum RideMetric {
       };
 }
 
+/// [values] (one per sample, null where missing) averaged over a window of
+/// [seconds] centred on each sample, using only the readings that exist. A
+/// [seconds] of 0 returns [values] unchanged. Gaps stay gaps.
+List<double?> smoothSeries(
+    List<RideSample> samples, List<double?> values, double seconds) {
+  if (seconds <= 0) return values;
+  final half = seconds / 2;
+  final out = <double?>[];
+  for (var i = 0; i < samples.length; i++) {
+    if (values[i] == null) {
+      out.add(null);
+      continue;
+    }
+    var sum = 0.0;
+    var n = 0;
+    for (var j = i; j >= 0 && samples[i].t - samples[j].t <= half; j--) {
+      final v = values[j];
+      if (v != null) {
+        sum += v;
+        n++;
+      }
+    }
+    for (var j = i + 1;
+        j < samples.length && samples[j].t - samples[i].t <= half;
+        j++) {
+      final v = values[j];
+      if (v != null) {
+        sum += v;
+        n++;
+      }
+    }
+    out.add(sum / n);
+  }
+  return out;
+}
+
 /// Metric toggles (which double as the legend) and, optionally, the
-/// time-window picker.
+/// time-window picker, in one compact row.
 class ChartOptions extends ConsumerWidget {
   const ChartOptions({super.key, required this.settings, this.showWindow = true});
 
   final ChartSettings settings;
   final bool showWindow;
 
-  static const _windows = <(String, Duration?)>[
-    ('All', null),
-    ('5 min', Duration(minutes: 5)),
-    ('10 min', Duration(minutes: 10)),
-    ('20 min', Duration(minutes: 20)),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = ref.read(chartSettingsProvider.notifier);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Wrap(spacing: 8, runSpacing: 4, children: [
-          for (final m in RideMetric.values)
-            FilterChip(
-              avatar: CircleAvatar(backgroundColor: m.color, radius: 6),
-              label: Text(m.label),
-              selected: settings.visible.contains(m),
-              showCheckmark: false,
-              onSelected: (_) => c.toggle(m),
-            ),
-        ]),
-        if (showWindow) ...[
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text('Show', style: Theme.of(context).textTheme.bodySmall),
-            for (final (label, w) in _windows)
-              ChoiceChip(
-                label: Text(label),
-                selected: settings.window == w,
-                onSelected: (_) => c.setWindow(w),
-              ),
-          ]),
-        ],
+        for (final m in RideMetric.values)
+          _MetricToggle(
+            metric: m,
+            selected: settings.visible.contains(m),
+            onTap: () => c.toggle(m),
+          ),
+        if (showWindow) _WindowMenu(window: settings.window, onChanged: c.setWindow),
       ],
+    );
+  }
+}
+
+/// A series in the legend that shows or hides it. On is a filled dot and a
+/// border in the series colour; off is a hollow dot and a quiet border, so
+/// the state never depends on colour alone.
+class _MetricToggle extends StatelessWidget {
+  const _MetricToggle({
+    required this.metric,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final RideMetric metric;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Semantics(
+      button: true,
+      toggled: selected,
+      label: metric.label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? metric.color : scheme.outlineVariant,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? metric.color : Colors.transparent,
+                border: Border.all(color: metric.color, width: 1.5),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              metric.label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// How much of the ride the live chart shows: all of it, or the last few
+/// minutes.
+class _WindowMenu extends StatelessWidget {
+  const _WindowMenu({required this.window, required this.onChanged});
+
+  final Duration? window;
+  final ValueChanged<Duration?> onChanged;
+
+  static const _minutes = [0, 5, 10, 20]; // 0 = the whole ride
+
+  static String _label(int minutes) =>
+      minutes == 0 ? 'Whole ride' : 'Last $minutes min';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final current = window?.inMinutes ?? 0;
+    return PopupMenuButton<int>(
+      tooltip: 'How much of the ride to show',
+      initialValue: current,
+      onSelected: (m) => onChanged(m == 0 ? null : Duration(minutes: m)),
+      itemBuilder: (_) => [
+        for (final m in _minutes)
+          PopupMenuItem(value: m, child: Text(_label(m))),
+      ],
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 32),
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(_label(current), style: theme.textTheme.bodySmall),
+          const Icon(Icons.arrow_drop_down, size: 18),
+        ]),
+      ),
     );
   }
 }
