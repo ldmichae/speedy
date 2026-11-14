@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,6 +97,34 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     await ref.read(trainerControllerProvider.notifier).disconnect();
   }
 
+  /// The map/chart views' stand-in for the header: the trainer, the view
+  /// choice and Disconnect, behind one button on the record bar.
+  Widget _viewMenu(String? deviceName, RideView view) => PopupMenuButton<Object>(
+        tooltip: 'View and trainer',
+        icon: const Icon(Icons.more_vert),
+        onSelected: (v) => v is RideView
+            ? ref.read(rideViewProvider.notifier).set(v)
+            : _disconnect(),
+        itemBuilder: (context) => [
+          PopupMenuItem(
+              enabled: false,
+              child: Row(children: [
+                const Icon(Icons.bluetooth_connected, size: 18),
+                const SizedBox(width: 8),
+                Flexible(child: Text(deviceName ?? 'Trainer')),
+              ])),
+          const PopupMenuDivider(),
+          for (final v in RideView.values)
+            CheckedPopupMenuItem(
+                value: v, checked: v == view, child: Text(v.label)),
+          const PopupMenuDivider(),
+          PopupMenuItem(
+              value: 'disconnect',
+              child: Text('Disconnect',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error))),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     final deviceName = ref.watch(trainerControllerProvider.select((s) => s.deviceName));
@@ -114,7 +144,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      if (!_editing)
+      if (!_editing && view == RideView.dashboard)
         TextButton.icon(
           onPressed: () => setState(() => _editing = true),
           icon: const Icon(Icons.dashboard_customize_outlined),
@@ -130,62 +160,92 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       ),
     ]);
 
+    final switcher = SegmentedButton<RideView>(
+      showSelectedIcon: false,
+      segments: [
+        for (final v in RideView.values)
+          ButtonSegment(value: v, label: Text(v.label)),
+      ],
+      selected: {view},
+      onSelectionChanged: (s) {
+        _editing = false; // only the dashboard is editable
+        ref.read(rideViewProvider.notifier).set(s.first);
+      },
+    );
+
+    // Controls and tiles read as one workout: outlined together while a
+    // ride is being recorded.
+    Widget outlined(Widget child) => Container(
+          padding: EdgeInsets.all(active ? 12 : 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active ? theme.colorScheme.primary : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: child,
+        );
+    final errorText = error == null
+        ? null
+        : Text(error, style: TextStyle(color: theme.colorScheme.error));
+
     return LayoutBuilder(builder: (context, box) {
       final compact = !isWideLayout(box.maxWidth);
 
-      // Controls and tiles read as one workout: outlined together while a
-      // ride is being recorded.
-      final workout = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const PlanBar(),
-        const WorkoutBar(),
-        const SizedBox(height: 12),
-        DashboardGrid(
-            editing: _editing,
-            compact: compact,
-            hidden: view == RideView.dashboard ? const {} : focusTiles),
-      ]);
-
-      final content = ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          deviceRow,
-          const SizedBox(height: 12),
-          SegmentedButton<RideView>(
-            showSelectedIcon: false,
-            segments: [
-              for (final v in RideView.values)
-                ButtonSegment(value: v, label: Text(v.label)),
+      final Widget content;
+      if (view == RideView.dashboard) {
+        content = ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            deviceRow,
+            const SizedBox(height: 12),
+            switcher,
+            const SizedBox(height: 12),
+            if (_editing) ...[
+              _EditToolbar(onDone: () => setState(() => _editing = false)),
+              const SizedBox(height: 12),
             ],
-            selected: {view},
-            onSelectionChanged: (s) =>
-                ref.read(rideViewProvider.notifier).set(s.first),
-          ),
-          const SizedBox(height: 12),
-          if (view != RideView.dashboard) ...[
-            if (view == RideView.map) const MapFocus() else const ChartFocus(),
-            const SizedBox(height: 12),
+            outlined(Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const PlanBar(),
+              const WorkoutBar(),
+              const SizedBox(height: 12),
+              DashboardGrid(editing: _editing, compact: compact),
+            ])),
+            if (errorText != null) ...[const SizedBox(height: 12), errorText],
           ],
-          if (_editing) ...[
-            _EditToolbar(onDone: () => setState(() => _editing = false)),
-            const SizedBox(height: 12),
-          ],
-          Container(
-            padding: EdgeInsets.all(active ? 12 : 0),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: active ? theme.colorScheme.primary : Colors.transparent,
-                width: 1.5,
+        );
+      } else {
+        // Map or chart over fixed metrics, sized to the window so the page
+        // does not scroll. Below a minimum height it scrolls rather than
+        // squashing the map.
+        final minHeight = 330 + MetricStrip.heightFor(compact);
+        content = SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: SizedBox(
+            height: math.max(box.maxHeight - 32, minHeight),
+            child: Column(children: [
+              Expanded(
+                child: outlined(Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const PlanBar(),
+                      WorkoutBar(trailing: _viewMenu(deviceName, view)),
+                      const SizedBox(height: 12),
+                      Expanded(
+                          child: view == RideView.map
+                              ? const MapFocus()
+                              : const ChartFocus()),
+                      const SizedBox(height: 12),
+                      MetricStrip(compact: compact),
+                    ])),
               ),
-            ),
-            child: workout,
+              if (errorText != null) ...[const SizedBox(height: 12), errorText],
+            ]),
           ),
-          if (error != null) ...[
-            const SizedBox(height: 12),
-            Text(error, style: TextStyle(color: theme.colorScheme.error)),
-          ],
-        ],
-      );
+        );
+      }
 
       // Keyboard: Space records, pauses or resumes; the arrow keys move the
       // ERG target by 5 W (25 W with Shift). Off while arranging tiles.

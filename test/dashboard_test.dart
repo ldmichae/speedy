@@ -9,6 +9,7 @@ import 'package:indoor_cycling/devices/trainer.dart';
 import 'package:indoor_cycling/ui/dashboard_layout_controller.dart';
 import 'package:indoor_cycling/ui/dashboard_tiles.dart';
 import 'package:indoor_cycling/ui/dashboard_view.dart';
+import 'package:indoor_cycling/ui/focus_views.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/recording_panel.dart';
 import 'package:indoor_cycling/ui/ride_chart.dart';
@@ -1075,5 +1076,27 @@ void main() {
       expect(rect(tester, TileKind.heartRate).top,
           lessThan(rect(tester, TileKind.powerAvg).top + 1));
     });
+  });
+
+  group('map and chart views', () {
+    for (final (name, size) in [
+      ('Chart', const Size(1400, 900)),
+      ('Map', const Size(1400, 900)),
+      ('Chart', const Size(700, 1000)),
+    ]) {
+      testWidgets('$name view at $size fits without scrolling, no editable grid',
+          (tester) async {
+        await openDashboard(tester, size: size);
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(MetricStrip), findsOneWidget);
+        expect(find.text('Edit layout'), findsNothing);
+        expect(tile(TileKind.cadence), findsNothing);
+        final scroll =
+            tester.state<ScrollableState>(find.byType(Scrollable).first);
+        expect(scroll.position.maxScrollExtent, 0);
+      });
+    }
   });
 }

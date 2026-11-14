@@ -12,7 +12,10 @@ import 'rider_profile_controller.dart';
 /// Timer and record/pause/stop controls. Always visible, so starting a ride
 /// does not move anything on screen.
 class WorkoutBar extends ConsumerWidget {
-  const WorkoutBar({super.key});
+  const WorkoutBar({super.key, this.trailing});
+
+  /// Shown at the end of the row, after the controls.
+  final Widget? trailing;
 
   Future<void> _stop(BuildContext context, WidgetRef ref) async {
     final c = ref.read(recorderProvider.notifier);
@@ -160,6 +163,7 @@ class WorkoutBar extends ConsumerWidget {
           ),
           const Spacer(),
           Wrap(spacing: 8, children: controls),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ]),
       ),
     );

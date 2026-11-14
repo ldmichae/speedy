@@ -22,16 +22,9 @@ const _sideGap = 16.0;
 /// the next open slots. The arrangement updates live while dragging, so the
 /// drop lands as previewed.
 class DashboardGrid extends ConsumerStatefulWidget {
-  const DashboardGrid(
-      {super.key,
-      required this.editing,
-      required this.compact,
-      this.hidden = const {}});
+  const DashboardGrid({super.key, required this.editing, required this.compact});
 
   final bool editing;
-
-  /// Kinds not drawn here because another part of the screen shows them.
-  final Set<TileKind> hidden;
 
   /// Narrow window: the two sides stack instead of sitting side by side.
   final bool compact;
@@ -126,8 +119,7 @@ class _DashboardGridState extends ConsumerState<DashboardGrid> {
   /// Ride-only tiles stay hidden until recording, but are shown while editing
   /// so they can be arranged.
   bool _visible(TileConfig t, bool recording) =>
-      !widget.hidden.contains(t.kind) &&
-      (widget.editing || recording || !t.kind.rideOnly);
+      widget.editing || recording || !t.kind.rideOnly;
 
 
   Widget _buildSide(Side side, DashboardLayout layout, bool recording) {

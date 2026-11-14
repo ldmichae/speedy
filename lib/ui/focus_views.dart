@@ -6,26 +6,56 @@ import '../core/dashboard_layout.dart';
 import 'dashboard_tiles.dart';
 import 'route_tile.dart';
 
-/// Tiles the focus views show themselves, so the metrics grid below skips them.
-const focusTiles = {TileKind.chart, TileKind.route};
-
-double _heroHeight(double width) => (width * 0.5).clamp(320.0, 560.0);
-
 /// Full-width map with the elevation profile laid over its bottom edge.
+/// Fills the space it is given.
 class MapFocus extends StatelessWidget {
   const MapFocus({super.key});
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-        builder: (_, box) => SizedBox(
-          height: _heroHeight(box.maxWidth),
-          child: const RouteMapTile(elevation: MapElevation.overlay),
-        ),
-      );
+  Widget build(BuildContext context) =>
+      const RouteMapTile(elevation: MapElevation.overlay);
+}
+
+/// The fixed metrics under the map/chart: power and the ERG controls, then
+/// cadence, speed, heart rate and distance. Not editable; a narrow window
+/// puts the small four on a second row.
+class MetricStrip extends StatelessWidget {
+  const MetricStrip({super.key, required this.compact});
+
+  final bool compact;
+
+  static const rowHeight = 116.0, gap = 12.0;
+
+  /// Total height for the given layout.
+  static double heightFor(bool compact) =>
+      compact ? 2 * rowHeight + gap : rowHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget row(List<(TileKind, int)> tiles) => SizedBox(
+          height: rowHeight,
+          child: Row(children: [
+            for (final (i, (k, flex)) in tiles.indexed) ...[
+              if (i > 0) const SizedBox(width: gap),
+              Expanded(flex: flex, child: DashboardTile(kind: k)),
+            ],
+          ]),
+        );
+    const big = [(TileKind.powerAvg, 2), (TileKind.ergTarget, 3)];
+    const small = [
+      (TileKind.cadence, 1),
+      (TileKind.speed, 1),
+      (TileKind.heartRate, 1),
+      (TileKind.distance, 1),
+    ];
+    return compact
+        ? Column(children: [row(big), const SizedBox(height: gap), row(small)])
+        : row([...big, ...small]);
+  }
 }
 
 /// Full-width chart with the map in a corner pane. Drag the pane's inner
-/// corner handle to resize it.
+/// corner handle to resize it. Fills the space it is given.
 class ChartFocus extends StatefulWidget {
   const ChartFocus({super.key});
 
@@ -41,51 +71,47 @@ class _ChartFocusState extends State<ChartFocus> {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (_, box) {
-        final h = _heroHeight(box.maxWidth);
         final maxW = math.max(_min.width, box.maxWidth * 0.7);
-        final maxH = math.max(_min.height, h - 2 * _inset);
+        final maxH = math.max(_min.height, box.maxHeight - 2 * _inset);
         final w = _pane.width.clamp(_min.width, maxW).toDouble();
         final ph = _pane.height.clamp(_min.height, maxH).toDouble();
-        return SizedBox(
-          height: h,
-          child: Stack(children: [
-            const Positioned.fill(child: DashboardTile(kind: TileKind.chart)),
-            Positioned(
-              top: _inset,
-              right: _inset,
-              width: w,
-              height: ph,
-              child: Stack(children: [
-                const Positioned.fill(
-                    child: RouteMapTile(elevation: MapElevation.none)),
-                // Bottom-left is the corner facing the chart's middle, so the
-                // pane grows leftwards and downwards from its fixed corner.
-                Positioned(
-                  left: 0,
-                  bottom: 0,
-                  width: _handle,
-                  height: _handle,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.resizeDownLeft,
-                    child: GestureDetector(
-                      key: const Key('paneResize'),
-                      behavior: HitTestBehavior.opaque,
-                      onPanUpdate: (d) => setState(() => _pane = Size(
-                          (w - d.delta.dx).clamp(_min.width, maxW).toDouble(),
-                          (ph + d.delta.dy).clamp(_min.height, maxH).toDouble())),
-                      child: const Align(
-                        alignment: Alignment.bottomLeft,
-                        child: Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.open_in_full, size: 16),
-                        ),
+        return Stack(children: [
+          const Positioned.fill(child: DashboardTile(kind: TileKind.chart)),
+          Positioned(
+            top: _inset,
+            right: _inset,
+            width: w,
+            height: ph,
+            child: Stack(children: [
+              const Positioned.fill(
+                  child: RouteMapTile(elevation: MapElevation.none)),
+              // Bottom-left is the corner facing the chart's middle, so the
+              // pane grows leftwards and downwards from its fixed corner.
+              Positioned(
+                left: 0,
+                bottom: 0,
+                width: _handle,
+                height: _handle,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.resizeDownLeft,
+                  child: GestureDetector(
+                    key: const Key('paneResize'),
+                    behavior: HitTestBehavior.opaque,
+                    onPanUpdate: (d) => setState(() => _pane = Size(
+                        (w - d.delta.dx).clamp(_min.width, maxW).toDouble(),
+                        (ph + d.delta.dy).clamp(_min.height, maxH).toDouble())),
+                    child: const Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.open_in_full, size: 16),
                       ),
                     ),
                   ),
                 ),
-              ]),
-            ),
-          ]),
-        );
+              ),
+            ]),
+          ),
+        ]);
       });
 }
