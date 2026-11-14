@@ -8,208 +8,114 @@
   <sub>Enjoying the app? A coffee helps keep it going.</sub>
 </p>
 
-A Flutter app for riding a smart trainer indoors. It connects to a Wahoo KICKR
-Core (or any trainer that speaks the standard Fitness Machine Service, FTMS)
-over Bluetooth, shows your live numbers, holds an ERG power target or follows a
-workout plan, lets you draw routes and multi-stage tours on a map and ride them
-(with the trainer simulating the climbs if you like), records rides, and keeps a
-history of them. A simulated trainer is built in, so the whole app can be
-developed and tried without hardware.
+Ride a smart trainer from your desktop. Connect a Wahoo KICKR (or any trainer
+that supports Bluetooth FTMS), follow a workout, or ride a route you drew on a
+map with the trainer's resistance following the climbs. Rides are recorded and
+exported as FIT or CSV.
 
-It is designed first for a desktop window in landscape. Narrow and portrait
-windows are supported and stack the same content vertically.
+No trainer? Pick **Use simulated trainer** on the first screen and try
+everything.
 
-## Features
+## What you can do
 
-- **Left dock:** every page (Ride, Routes, Tours, Plans, History, Preferences)
-  is in a dock on the left. It collapses to an icon rail, and on narrow windows
-  it becomes a drawer behind a menu bar. Pages have no top bars, so content
-  gets the room.
-- **Live data:** power (3 s average and instant), cadence, speed and heart rate.
-- **ERG mode:** set a target in watts and nudge it up or down in 5, 10 and 25 W
-  steps (arrow keys too).
-- **Workout plans:** build a plan from blocks of steps, in watts or as a percent
-  of your FTP, with optional ramps (a step can ramp from one value to another)
-  and repeats. A live chart of the plan stays on screen while you edit. Starting
-  a plan starts recording; the bar on the dashboard lets you pause, skip a step
-  or stop, and the plan is drawn on the ride chart. The plan owns the ERG target
-  while it runs.
-- **Recording:** record, pause, resume and stop. On stop you save or discard
-  the ride. Time, distance, average power and an energy estimate update live,
-  with a chart of target, power, cadence and more. Hover the chart for a
-  crosshair and a tooltip of every visible metric.
-- **Routes:** draw a route on an OpenStreetMap map by clicking points; each
-  stretch snaps to roads (see *Services* below). Choose **Any road** (motorways
-  and tunnels allowed, no cycle paths) or **Bike-friendly** per stretch. Ride a
-  route and a blue dot moves along it as you pedal, in a map tile you add to the
-  dashboard.
-- **Elevation:** routes and tours get an elevation profile (climb, descent,
-  steepest grade) in the editor, the routes list and the ride tile.
-- **Simulation mode:** ride a route with simulated climbs and the trainer's
-  resistance follows the road grade (limited to -10% to +15%). Speed, and so
-  your dot, then follows the terrain. The ERG controls lock while it runs.
-- **Tours:** a long ride planned as stages. Elevation is loaded per stage, only
-  when you ask or when a ride is about to need it (the current stage, then the
-  next one from 70% through), so a tour can be as long as you like. Stages are
-  ticked off as you ride them, and you can start from any stage.
-- **Ride history:** a list of saved rides (time, distance, average power,
-  energy) and a detail view with the same chart. Rides can be deleted after a
-  confirmation.
-- **Power produced:** your total output in Wh across all saved rides, and for
-  the ride you are ending, with household comparisons (toast, a desk fan, a
-  phone charge, a kettle).
-- **Export:** each saved ride is also written as a **FIT** or **CSV** file.
-- **Editable dashboard:** tiles for each metric, the ERG target, the chart and
-  the route map, in a left and a right side that you arrange yourself (see
-  below).
-- **Rider profile:** height, weight, age and sex, used to estimate calories.
-- **Preferences:** colour palette, export format, FTP, metric or imperial units
-  (separately for ride data and body measurements), the rider profile, and
-  credits for the map, routing and elevation data. Everything is remembered
-  between launches.
+- **Ride with live numbers:** power (3 s average and instant), cadence, speed,
+  heart rate, distance and energy, with a live chart.
+- **ERG mode:** hold a target wattage and nudge it with the buttons or arrow
+  keys (5 W, or 25 W with Shift). Space starts, pauses and resumes recording.
+- **Workout plans:** build plans from steps in watts or % of FTP, with ramps
+  and repeats. A plan drives the ERG target and draws itself on the ride chart.
+- **Routes and tours:** draw a route on a map (snapped to roads) or split one
+  into stages for a long tour. Each gets an elevation profile.
+- **Simulation mode:** the trainer's resistance follows the road grade
+  (-10% to +15%) as you ride your route.
+- **History:** saved rides with the same chart, and your total power output
+  compared with toast, a kettle and a phone charge.
+- **Three ride views:** a customisable **Dashboard** of tiles, a **Map** view
+  (full-width map with the elevation profile along its bottom edge), or a
+  **Chart** view (full-width chart with a resizable map in the corner). Map and
+  Chart keep the key metrics in a fixed strip and never scroll.
+- **Make it yours:** colour palette, metric or imperial units, FTP and a rider
+  profile for calorie estimates. Everything is remembered between launches.
 
-### Editing the dashboard
+Built for a landscape desktop window; narrow and portrait windows stack the
+same content.
 
-Press **Edit layout** on the dashboard. Each side is its own three-column grid
-that fills row by row.
-
-- Drag a tile anywhere on either side, including onto empty space. Tiles in
-  the way are shoved on to the next open slots, and the result is previewed
-  as you drag.
-- The gear on a tile sets its width (1/3, 2/3 or Full of the side) and height,
-  chooses which metric it shows (picking one that is already on the dashboard
-  swaps the two), or removes it.
-- **Add tile** puts a removed tile back (the route map is added this way);
-  **Reset to default** restores the standard layout.
-- The ride totals, the chart and the route map only appear once you start
-  recording, but are shown while editing so you can place them.
-
-## Set up
-
-The platform folders (`web`, `windows`, `macos`, `android`) are in the repo.
+## Run it
 
     flutter pub get
-    flutter test
     flutter run -d windows        # or: -d macos / -d chrome
 
-Choose **Use simulated trainer** on the first screen to try everything without
-a trainer. The simulated trainer holds a steady 150 W in simulation mode and
-works out speed from the grade (85 kg rider and bike assumed).
-
 If `pub get` complains about a version, run `flutter pub add universal_ble`
-and `flutter pub upgrade --major-versions`.
+then `flutter pub upgrade --major-versions`.
 
-## Platform config
+**First ride with a real trainer:** close the Wahoo and Zwift apps, wake the
+trainer by pedalling, then choose Find trainer. For simulation mode, set your
+weight in the trainer's own app first, since the grade command does not carry
+it.
 
-- **Web:** Chrome/Edge only, HTTPS or localhost. Pairing needs a button click.
-  Saving rides and ride history are not supported on web yet. Tours are kept in
-  browser storage, which is small, and elevation uses Open-Meteo only (the
-  terrain tiles cannot be read from a browser).
-- **macOS:** in `macos/Runner/DebugProfile.entitlements` and `Release.entitlements`
-  add `com.apple.security.device.bluetooth` = true, and in `macos/Runner/Info.plist`
-  add `NSBluetoothAlwaysUsageDescription`. The network client entitlement
-  (`com.apple.security.network.client`) is already set for maps and routing.
-- **Windows:** nothing extra (Windows 10 2004+).
-- **Android:** in `AndroidManifest.xml` add `BLUETOOTH_SCAN` (with
-  `usesPermissionFlags="neverForLocation"`), `BLUETOOTH_CONNECT`, and for
-  API 30 and below `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION`
-  (`maxSdkVersion="30"`). Check universal_ble's README for runtime-permission
-  details. `INTERNET` is already declared for maps and routing.
+### Platform notes
 
-## Services it talks to
+- **Web:** Chrome or Edge on HTTPS or localhost. Saving rides and history are
+  not supported yet, and elevation comes from Open-Meteo only.
+- **Windows:** nothing extra (Windows 10 2004 or later).
+- **macOS:** add the `com.apple.security.device.bluetooth` entitlement (Debug
+  and Release) and `NSBluetoothAlwaysUsageDescription` in `Info.plist`.
+- **Android:** add the Bluetooth permissions (`BLUETOOTH_SCAN` with
+  `neverForLocation`, `BLUETOOTH_CONNECT`, and the legacy ones for API 30 and
+  below). See [universal_ble](https://pub.dev/packages/universal_ble).
 
-Maps, routing and elevation come from free public services, so the app is
-careful with them. All are for light, personal use; if you distribute the app
-widely, swap in your own or a keyed provider (each is behind one constant or
-provider).
-
-| Service | Used for | How we treat it |
-|---|---|---|
-| `tile.openstreetmap.org` | map tiles | identifying User-Agent, disk cache that honours cache headers, no retries, zoom 3-18, no prefetching, "© OpenStreetMap contributors" always visible on the map. See OSM's [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). |
-| `routing.openstreetmap.de` (FOSSGIS OSRM) | snapping clicks to roads | one request at a time, at least a second apart, identifying User-Agent. The `routed-car` engine is "Any road", `routed-bike` is "Bike-friendly". |
-| AWS Terrain Tiles | elevation (native only) | one PNG per ~7-10 km tile, downloaded once and cached forever, at most 2 at a time. |
-| Open-Meteo elevation API | elevation fallback, and on web | billed per coordinate (600 a minute, about 10,000 a day), so lookups are capped at 250 points a route, paced by its rate-limit headers, and never retried on a 429. |
-
-If a service fails, the app degrades instead of stopping: a stretch that cannot
-snap is drawn straight, a route without elevation still rides (flat in
-simulation mode), and a rate limit shows a "try again in N min" message.
-
-## Where your data goes
+## Your data
 
 - **Exported rides:** `<Documents>/IndoorCycling/ride_YYYYMMDD_HHMMSS.fit` (or
-  `.csv`), in the format chosen in Preferences.
-- **Ride history:** one JSON file per ride in the app's support folder, under
-  `history/`. These keep the ERG target, which FIT cannot, and the energy
-  estimate from when the ride was saved. Deleting a ride from history does not
-  delete its exported file.
-- **Tours:** one JSON file per tour under `tours/` in the same folder (browser
-  storage on web). Paths are simplified to about 5 m.
-- **Terrain tile cache:** `terrain/` in the same folder.
-- **Preferences, FTP, workout plans, single routes and the dashboard layout:**
-  stored with `shared_preferences`.
+  `.csv`).
+- **History, tours and the terrain cache:** JSON files in the app's support
+  folder (browser storage on web). Deleting a ride from history leaves its
+  exported file alone.
+- **Settings, FTP, plans and the dashboard layout:** `shared_preferences`.
 
-Saved rides, exports and the rider profile are always metric; imperial units
-only change what is shown and typed.
+Saved rides and exports are always metric; imperial only changes what you see.
 
-## Layout
+## Online services
 
-    lib/core/                  data and rules, no Flutter widgets: BikeData,
-                               PowerSmoother, ride samples and the Recording
-                               rules, stats and calories, FIT/CSV export,
-                               ride history store, rider profile, units,
-                               dashboard layout model and tile placement,
-                               workout plans, routes and tours, elevation,
-                               OSRM / Open-Meteo / terrain-tile clients,
-                               power-produced comparisons
-    lib/devices/trainer.dart   Trainer interface (ERG + SIM)
-    lib/devices/trainer_session.dart   a connected trainer with smoothed readings
-    lib/devices/ble/           BleTransport seam, device scanner, and the one
-                               universal_ble file
-    lib/devices/ftms/          parser, control point queue, FtmsTrainer
-    lib/devices/simulated/     simulated trainer (ERG and grade simulation)
-    lib/ui/                    Riverpod controllers and screens: the dock and
-                               page frame (home_screen.dart, navigation.dart),
-                               dashboard and its tile grid, recording bar, ride
-                               chart, plans, routes, tours, elevation chart,
-                               history, preferences
-    test/                      unit and widget tests; test/fakes/ holds
-                               in-memory stand-ins for Bluetooth and ride history
+Maps, routing and elevation use free public services, so the app is gentle with
+them: cached, rate-limited and never retried on a rate limit. They are meant for
+light personal use. If you distribute the app widely, swap in your own or a
+keyed provider (each is behind one constant or provider).
 
-## Tests
+| Service | Used for |
+|---|---|
+| OpenStreetMap tiles | map ([tile policy](https://operations.osmfoundation.org/policies/tiles/)) |
+| FOSSGIS OSRM | snapping clicks to roads |
+| AWS Terrain Tiles | elevation (native only) |
+| Open-Meteo | elevation fallback, and on web |
 
-    flutter test
-
-`test/widget_test.dart` (connect to the simulated trainer, then Disconnect)
-currently fails and is not fixed yet: disconnecting never completes under the
-test's fake clock, although it works in the app. Everything else passes. Tests
-never use the network; the map tiles, routing and elevation sources are
-replaced with fakes.
-
-## First hardware test
-
-1. Close the Wahoo and Zwift apps and anything else connected to the KICKR.
-2. Wake the trainer by pedalling, then Find trainer.
-3. Once connected it starts ERG at 100 W; use the +/- buttons to move the target.
-4. For simulation mode, set your weight in the trainer's own app first (Wahoo,
-   for a KICKR): the grade command does not carry rider weight, so the trainer
-   uses what it has stored.
+If a service fails the app carries on: a stretch that cannot snap is drawn
+straight, and a route without elevation still rides (flat).
 
 ## Known limits
 
-- **Calories are an estimate:** pedalling work at a typical cycling efficiency
-  plus resting metabolism (Mifflin-St Jeor) from your profile. Real efficiency
-  varies between riders.
-- **FIT export** is a small hand-written encoder (file id, records, session and
-  activity). It has not yet been checked against Strava or Garmin Connect, so
-  import one ride before relying on it.
-- **Distance** is worked out from speed over time, so it works for trainers
-  that do not report a distance value. It also moves the dot on a route.
-- **Elevation is approximate:** the data is about 30-90 m resolution, so short
-  steep ramps and bridges can be wrong, and heights from the two sources differ
-  by about 20 m on average in steep country.
-- **Routing:** "Any road" ignores cycle paths and may use roads where cycling is
-  illegal; fine for an indoor ride, not for planning an outdoor one.
-- **History** reads every ride file to build the list, which is fine for dozens
-  of rides but would need an index for hundreds.
-- **Not yet:** extending a tour while riding, GPX import/export, offline map
-  tiles, and showing a ride's route on the history chart.
+- Calories are an estimate from your profile and typical cycling efficiency.
+- FIT export is a small hand-written encoder, not yet checked against Strava or
+  Garmin Connect. Import one ride before relying on it.
+- Elevation is approximate (30-90 m resolution): short steep ramps and bridges
+  can be wrong.
+- "Any road" routing ignores cycle paths and may use roads closed to bikes. Fine
+  for an indoor ride, not for planning an outdoor one.
+- Not yet: extending a tour while riding, offline map tiles, and showing a
+  ride's route on the history chart.
+
+## For developers
+
+    flutter test
+
+Tests never touch the network or Bluetooth; both are replaced with fakes.
+`test/widget_test.dart` (connect to the simulated trainer, then Disconnect)
+currently fails: disconnecting never completes under the test's fake clock,
+though it works in the app. Everything else passes.
+
+    lib/core/       data and rules, no widgets: ride recording, stats, FIT/CSV
+                    export, plans, routes, tours, elevation, service clients
+    lib/devices/    trainer interface, FTMS parser, Bluetooth seam, simulated
+                    trainer
+    lib/ui/         Riverpod controllers and screens
+    test/           unit and widget tests, with fakes in test/fakes/
