@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/ride_record.dart';
 import 'format.dart';
+import 'layout.dart';
 import 'ride_chart.dart';
 import 'ride_history_provider.dart';
 import 'units_controller.dart';
@@ -32,35 +33,56 @@ class HistoryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Ride history')),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: rides.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Could not load rides: $e')),
-              data: (list) => list.isEmpty
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text(
-                          'No rides yet. Record a ride and save it to see it here.',
-                          textAlign: TextAlign.center,
+        child: LayoutBuilder(builder: (context, box) {
+          final wide = isWideLayout(box.maxWidth);
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: wide ? 1100 : 720),
+              child: rides.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Could not load rides: $e')),
+                data: (list) => list.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'No rides yet. Record a ride and save it to see it here.',
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: list.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) => _RideCard(ride: list[i]),
-                    ),
+                      )
+                    : wide
+                        // shortcut: builds every card up front; switch to a
+                        // lazy grid if histories reach hundreds of rides.
+                        ? SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: LayoutBuilder(builder: (context, inner) {
+                              final cardWidth = (inner.maxWidth - 12) / 2;
+                              return Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  for (final r in list)
+                                    SizedBox(width: cardWidth, child: _RideCard(ride: r)),
+                                ],
+                              );
+                            }),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: list.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 12),
+                            itemBuilder: (_, i) => _RideCard(ride: list[i]),
+                          ),
+              ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
 }
+
 
 /// Asks before deleting [ride] from history. Returns true only if it was
 /// deleted; a failure is reported in a snackbar and returns false.
@@ -174,45 +196,51 @@ class RideDetailScreen extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: RideStatRow(stats: ride.stats),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          height: 240,
-                          child: RideChart(
-                            samples: ride.samples,
-                            settings: settings,
-                            units: ref.watch(rideUnitsProvider),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ChartOptions(settings: settings, showWindow: false),
-                      ],
+        child: LayoutBuilder(builder: (context, box) {
+          final wide = isWideLayout(box.maxWidth);
+          // On a wide window the chart takes the height the stats don't need.
+          final chartHeight = wide ? (box.maxHeight - 280).clamp(280.0, 700.0) : 240.0;
+          return Center(
+            child: ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxWidth: wide ? wideContentMaxWidth : 720),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: RideStatRow(stats: ride.stats),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            height: chartHeight,
+                            child: RideChart(
+                              samples: ride.samples,
+                              settings: settings,
+                              units: ref.watch(rideUnitsProvider),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ChartOptions(settings: settings, showWindow: false),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }

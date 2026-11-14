@@ -39,14 +39,19 @@ class MetricTile extends StatelessWidget {
           children: [
             Text(label, style: theme.textTheme.bodyMedium),
             SizedBox(height: hero ? 12 : 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(value, style: numberStyle),
-                const SizedBox(width: 6),
-                Text(unit, style: theme.textTheme.titleMedium),
-              ],
+            // Shrinks the number and unit rather than overflowing a narrow tile.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(value, style: numberStyle),
+                  const SizedBox(width: 6),
+                  Text(unit, style: theme.textTheme.titleMedium),
+                ],
+              ),
             ),
             if (footnote != null) ...[
               const SizedBox(height: 8),

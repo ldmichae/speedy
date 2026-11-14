@@ -5,6 +5,7 @@ import '../core/ride_export.dart';
 import '../core/rider_profile.dart';
 import '../core/units.dart';
 import 'app_palette.dart';
+import 'layout.dart';
 import 'recorder_controller.dart';
 import 'rider_profile_controller.dart';
 import 'units_controller.dart';
@@ -32,76 +33,96 @@ class PreferencesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final format = ref.watch(rideFormatProvider);
+    final appearance = const _Section(
+      title: 'Appearance',
+      description: 'Colour palette for the app.',
+      child: PaletteChooser(),
+    );
+    final recording = _Section(
+      title: 'Recording',
+      description: 'File format used when you save a ride. '
+          'FIT uploads to Strava and Garmin; CSV also keeps the '
+          'ERG target.',
+      child: SegmentedButton<RideFormat>(
+        segments: [
+          for (final f in RideFormat.values)
+            ButtonSegment(value: f, label: Text(f.label)),
+        ],
+        selected: {format},
+        onSelectionChanged: (s) =>
+            ref.read(rideFormatProvider.notifier).set(s.first),
+      ),
+    );
+    final units = _Section(
+      title: 'Units',
+      description: 'Ride data covers speed and distance; body '
+          'measurements cover height and weight. Saved rides and '
+          'exported files always use metric.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _UnitsPicker(
+            key: const Key('rideUnits'),
+            label: 'Ride data',
+            value: ref.watch(rideUnitsProvider),
+            onChanged: ref.read(rideUnitsProvider.notifier).set,
+          ),
+          const SizedBox(height: 16),
+          _UnitsPicker(
+            key: const Key('bodyUnits'),
+            label: 'Body measurements',
+            value: ref.watch(bodyUnitsProvider),
+            onChanged: ref.read(bodyUnitsProvider.notifier).set,
+          ),
+        ],
+      ),
+    );
+    final profile = const _Section(
+      title: 'Rider profile',
+      description: 'Used to estimate calories burned. Estimates '
+          'stay blank until every field is filled in.',
+      child: _RiderProfileForm(),
+    );
+
+    Widget stack(List<Widget> sections) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < sections.length; i++) ...[
+            if (i > 0) const SizedBox(height: 24),
+            sections[i],
+          ],
+        ]);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Preferences')),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                const _Section(
-                  title: 'Appearance',
-                  description: 'Colour palette for the app.',
-                  child: PaletteChooser(),
-                ),
-                const SizedBox(height: 24),
-                _Section(
-                  title: 'Recording',
-                  description: 'File format used when you save a ride. '
-                      'FIT uploads to Strava and Garmin; CSV also keeps the '
-                      'ERG target.',
-                  child: SegmentedButton<RideFormat>(
-                    segments: [
-                      for (final f in RideFormat.values)
-                        ButtonSegment(value: f, label: Text(f.label)),
-                    ],
-                    selected: {format},
-                    onSelectionChanged: (s) =>
-                        ref.read(rideFormatProvider.notifier).set(s.first),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _Section(
-                  title: 'Units',
-                  description: 'Ride data covers speed and distance; body '
-                      'measurements cover height and weight. Saved rides and '
-                      'exported files always use metric.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _UnitsPicker(
-                        key: const Key('rideUnits'),
-                        label: 'Ride data',
-                        value: ref.watch(rideUnitsProvider),
-                        onChanged: ref.read(rideUnitsProvider.notifier).set,
-                      ),
-                      const SizedBox(height: 16),
-                      _UnitsPicker(
-                        key: const Key('bodyUnits'),
-                        label: 'Body measurements',
-                        value: ref.watch(bodyUnitsProvider),
-                        onChanged: ref.read(bodyUnitsProvider.notifier).set,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const _Section(
-                  title: 'Rider profile',
-                  description: 'Used to estimate calories burned. Estimates '
-                      'stay blank until every field is filled in.',
-                  child: _RiderProfileForm(),
-                ),
-              ],
+        child: LayoutBuilder(builder: (context, box) {
+          final wide = isWideLayout(box.maxWidth);
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: wide ? 1100 : 720),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (wide)
+                    // Short settings on the left, the longer profile form on the right.
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(child: stack([appearance, recording])),
+                      const SizedBox(width: 24),
+                      Expanded(child: stack([units, profile])),
+                    ])
+                  else
+                    stack([appearance, recording, units, profile]),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
 }
+
 
 class _UnitsPicker extends StatelessWidget {
   const _UnitsPicker({

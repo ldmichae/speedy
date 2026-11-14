@@ -5,6 +5,7 @@ import '../devices/trainer.dart';
 import 'connect_view.dart';
 import 'dashboard_view.dart';
 import 'history_screen.dart';
+import 'layout.dart';
 import 'preferences_screen.dart';
 import 'trainer_controller.dart';
 
@@ -13,7 +14,8 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(trainerControllerProvider.select((s) => s.status));
+    final connected = ref.watch(
+        trainerControllerProvider.select((s) => s.status == TrainerStatus.connected));
     return Scaffold(
       appBar: AppBar(
         title: const Text('Indoor Cycling'),
@@ -22,8 +24,8 @@ class HomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: status == TrainerStatus.connected
+            constraints: BoxConstraints(maxWidth: connected ? wideContentMaxWidth : 720),
+            child: connected
                 ? const DashboardView()
                 : const ConnectView(),
           ),

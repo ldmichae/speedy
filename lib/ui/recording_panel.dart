@@ -9,8 +9,10 @@ import 'ride_chart.dart';
 import 'rider_profile_controller.dart';
 import 'units_controller.dart';
 
-class RecordingPanel extends ConsumerWidget {
-  const RecordingPanel({super.key});
+/// Timer and record/pause/stop controls. Always visible, so starting a ride
+/// does not move anything on screen.
+class WorkoutBar extends ConsumerWidget {
+  const WorkoutBar({super.key});
 
   Future<void> _stop(BuildContext context, WidgetRef ref) async {
     final c = ref.read(recorderProvider.notifier);
@@ -75,11 +77,8 @@ class RecordingPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rec = ref.watch(recorderProvider);
-    final settings = ref.watch(chartSettingsProvider);
-    final profile = ref.watch(riderProfileProvider);
     final c = ref.read(recorderProvider.notifier);
     final theme = Theme.of(context);
-    final kcal = rideKcal(rec.samples, profile);
 
     final controls = switch (rec.status) {
       RecStatus.idle => [
@@ -118,39 +117,61 @@ class RecordingPanel extends ConsumerWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(children: [
+          if (rec.status == RecStatus.recording)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Icon(Icons.circle, size: 12, color: theme.colorScheme.error),
+            ),
+          Text(
+            switch (rec.status) {
+              RecStatus.idle => 'Ready to ride',
+              RecStatus.paused => 'Paused  ${clock(rec.elapsed)}',
+              RecStatus.recording => clock(rec.elapsed),
+            },
+            style: theme.textTheme.titleMedium,
+          ),
+          const Spacer(),
+          Wrap(spacing: 8, children: controls),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Totals so far, and the chart with its options. Only shown once a ride is
+/// being recorded.
+class WorkoutSummary extends ConsumerWidget {
+  const WorkoutSummary({super.key, this.chartHeight = 240});
+
+  final double chartHeight;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rec = ref.watch(recorderProvider);
+    final settings = ref.watch(chartSettingsProvider);
+    final kcal = rideKcal(rec.samples, ref.watch(riderProfileProvider));
+    final stats = RideStats.of(rec.samples, kcal: kcal);
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              if (rec.status == RecStatus.recording)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Icon(Icons.circle, size: 12, color: theme.colorScheme.error),
-                ),
-              Text(
-                rec.status == RecStatus.idle
-                    ? 'Ride recording'
-                    : rec.status == RecStatus.paused
-                        ? 'Paused  ${clock(rec.elapsed)}'
-                        : clock(rec.elapsed),
-                style: theme.textTheme.titleMedium,
-              ),
-              const Spacer(),
-              Wrap(spacing: 8, children: controls),
-            ]),
-            if (rec.status != RecStatus.idle) ...[
+            RideStatRow(stats: stats),
+            if (kcal == null) ...[
               const SizedBox(height: 4),
               Text(
-                kcal != null
-                    ? '≈ ${kcal.round()} kcal burned'
-                    : 'Add your rider profile in Preferences to estimate calories',
-                style: theme.textTheme.bodySmall,
+                'Add your rider profile in Preferences to estimate calories.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
             const SizedBox(height: 16),
             SizedBox(
-              height: 240,
+              height: chartHeight,
               child: RideChart(
                 samples: rec.samples,
                 settings: settings,
