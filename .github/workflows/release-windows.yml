@@ -1,0 +1,26 @@
+name: Release (Windows)
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath indoor_cycling-${{ github.ref_name }}-windows.zip
+      - name: Publish release
+        run: gh release create ${{ github.ref_name }} indoor_cycling-${{ github.ref_name }}-windows.zip --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
