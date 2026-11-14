@@ -553,8 +553,9 @@ class _MetricToggle extends StatelessWidget {
       button: true,
       toggled: selected,
       label: metric.label,
-      excludeSemantics: true,
-      child: InkWell(
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Container(
@@ -587,6 +588,7 @@ class _MetricToggle extends StatelessWidget {
             ),
           ]),
         ),
+      ),
       ),
     );
   }

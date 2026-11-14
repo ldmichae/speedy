@@ -222,8 +222,8 @@ class TargetChip extends StatelessWidget {
 
     return Semantics(
       label: spoken,
-      excludeSemantics: true,
-      child: DecoratedBox(
+      child: ExcludeSemantics(
+        child: DecoratedBox(
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(999),
@@ -242,6 +242,7 @@ class TargetChip extends StatelessWidget {
                 )),
           ]),
         ),
+      ),
       ),
     );
   }
