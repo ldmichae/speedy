@@ -15,6 +15,8 @@ void main() {
 
     expect(find.text('ERG target'), findsOneWidget);
 
+    await tester.tap(find.byTooltip('View and trainer'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Disconnect'));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Connect your trainer'), findsOneWidget);

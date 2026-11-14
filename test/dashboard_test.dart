@@ -76,8 +76,16 @@ Future<void> stopRecording(WidgetTester tester, ProviderContainer c) async {
   await tester.pump();
 }
 
+/// Opens the ⋮ menu on the record bar and taps one of its items.
+Future<void> menuTap(WidgetTester tester, String item) async {
+  await tester.tap(find.byTooltip('View and trainer'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(item));
+  await tester.pumpAndSettle();
+}
+
 Future<void> startEditing(WidgetTester tester) async {
-  await tester.tap(find.text('Edit layout'));
+  await menuTap(tester, 'Edit layout');
   await tester.pumpAndSettle();
 }
 
@@ -408,7 +416,7 @@ void main() {
     testWidgets('disconnects straight away when not recording', (tester) async {
       final c = await openDashboard(tester);
 
-      await tester.tap(find.text('Disconnect'));
+      await menuTap(tester, 'Disconnect');
       await settleDisconnect(tester);
 
       expect(find.text('Disconnect the trainer?'), findsNothing);
@@ -420,7 +428,7 @@ void main() {
       final c = await openDashboard(tester);
       await record(tester);
 
-      await tester.tap(find.text('Disconnect'));
+      await menuTap(tester, 'Disconnect');
       await tester.pumpAndSettle();
       expect(find.text('Disconnect the trainer?'), findsOneWidget);
       expect(find.textContaining('recording pauses'), findsOneWidget);
@@ -438,7 +446,7 @@ void main() {
       final c = await openDashboard(tester);
       await record(tester);
 
-      await tester.tap(find.text('Disconnect'));
+      await menuTap(tester, 'Disconnect');
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Disconnect'));
       await settleDisconnect(tester);
@@ -649,6 +657,8 @@ void main() {
       await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byTooltip('View and trainer'));
+      await tester.pumpAndSettle();
       expect(find.text('Edit layout'), findsOneWidget);
       expect(tile(TileKind.chart), findsNothing);
       expect(tester.takeException(), isNull);
@@ -1087,7 +1097,7 @@ void main() {
       testWidgets('$name view at $size fits without scrolling, no editable grid',
           (tester) async {
         await openDashboard(tester, size: size);
-        await tester.tap(find.text(name));
+        await menuTap(tester, name);
         await tester.pumpAndSettle();
 
         expect(find.byType(MetricStrip), findsOneWidget);

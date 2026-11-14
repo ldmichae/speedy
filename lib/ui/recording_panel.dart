@@ -163,7 +163,7 @@ class WorkoutBar extends ConsumerWidget {
           ),
           const Spacer(),
           Wrap(spacing: 8, children: controls),
-          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+          if (trailing != null) trailing!,
         ]),
       ),
     );

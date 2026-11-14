@@ -97,14 +97,24 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     await ref.read(trainerControllerProvider.notifier).disconnect();
   }
 
-  /// The map/chart views' stand-in for the header: the trainer, the view
-  /// choice and Disconnect, behind one button on the record bar.
+  /// The trainer, the view choice, Edit layout (dashboard only) and
+  /// Disconnect, behind one button on the record bar.
   Widget _viewMenu(String? deviceName, RideView view) => PopupMenuButton<Object>(
         tooltip: 'View and trainer',
+        // Narrower than the default 48 px, to fit a phone-width record bar.
+        style: IconButton.styleFrom(
+            minimumSize: const Size(36, 48), padding: EdgeInsets.zero),
         icon: const Icon(Icons.more_vert),
-        onSelected: (v) => v is RideView
-            ? ref.read(rideViewProvider.notifier).set(v)
-            : _disconnect(),
+        onSelected: (v) {
+          if (v is RideView) {
+            _editing = false; // only the dashboard is editable
+            ref.read(rideViewProvider.notifier).set(v);
+          } else if (v == 'edit') {
+            setState(() => _editing = true);
+          } else {
+            _disconnect();
+          }
+        },
         itemBuilder: (context) => [
           PopupMenuItem(
               enabled: false,
@@ -117,6 +127,14 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           for (final v in RideView.values)
             CheckedPopupMenuItem(
                 value: v, checked: v == view, child: Text(v.label)),
+          if (view == RideView.dashboard && !_editing)
+            const PopupMenuItem(
+                value: 'edit',
+                child: Row(children: [
+                  Icon(Icons.dashboard_customize_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Text('Edit layout'),
+                ])),
           const PopupMenuDivider(),
           PopupMenuItem(
               value: 'disconnect',
@@ -133,45 +151,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     final view = ref.watch(rideViewProvider);
     final active = ref.watch(
         recorderProvider.select((r) => r.status != RecStatus.idle));
-
-    final deviceRow = Row(children: [
-      const Icon(Icons.bluetooth_connected, size: 20),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          deviceName ?? 'Trainer',
-          style: theme.textTheme.titleMedium,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      if (!_editing && view == RideView.dashboard)
-        TextButton.icon(
-          onPressed: () => setState(() => _editing = true),
-          icon: const Icon(Icons.dashboard_customize_outlined),
-          label: const Text('Edit layout'),
-        ),
-      // Set apart from Edit layout, in the error colour, since it ends the ride.
-      const SizedBox(width: 12),
-      TextButton.icon(
-        style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
-        onPressed: _disconnect,
-        icon: const Icon(Icons.link_off),
-        label: const Text('Disconnect'),
-      ),
-    ]);
-
-    final switcher = SegmentedButton<RideView>(
-      showSelectedIcon: false,
-      segments: [
-        for (final v in RideView.values)
-          ButtonSegment(value: v, label: Text(v.label)),
-      ],
-      selected: {view},
-      onSelectionChanged: (s) {
-        _editing = false; // only the dashboard is editable
-        ref.read(rideViewProvider.notifier).set(s.first);
-      },
-    );
 
     // Controls and tiles read as one workout: outlined together while a
     // ride is being recorded.
@@ -198,10 +177,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         content = ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            deviceRow,
-            const SizedBox(height: 12),
-            switcher,
-            const SizedBox(height: 12),
             if (_editing) ...[
               _EditToolbar(onDone: () => setState(() => _editing = false)),
               const SizedBox(height: 12),
@@ -209,7 +184,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             outlined(Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const PlanBar(),
-              const WorkoutBar(),
+              WorkoutBar(trailing: _viewMenu(deviceName, view)),
               const SizedBox(height: 12),
               DashboardGrid(editing: _editing, compact: compact),
             ])),
