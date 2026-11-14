@@ -7,6 +7,7 @@ import '../core/units.dart';
 import '../core/tour.dart';
 import '../devices/trainer.dart';
 import 'elevation_chart.dart';
+import 'gpx_import.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
 import 'route_screen.dart';
@@ -168,6 +169,18 @@ class TourScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(tour.name),
         actions: [
+          IconButton(
+            tooltip: 'Import GPX as a stage',
+            icon: const Icon(Icons.upload_file),
+            onPressed: () async {
+              final s = await pickGpxRoute(context);
+              if (s == null) return;
+              final now = ref.read(toursProvider.notifier).byId(tour.id);
+              if (now != null) {
+                await ref.read(toursProvider.notifier).upsert(now.withAddedStage(s));
+              }
+            },
+          ),
           IconButton(
             tooltip: 'Delete tour',
             icon: const Icon(Icons.delete_outline),

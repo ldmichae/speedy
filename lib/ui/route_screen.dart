@@ -9,6 +9,7 @@ import '../core/units.dart';
 import '../core/route_service.dart';
 import '../devices/trainer.dart';
 import 'elevation_chart.dart';
+import 'gpx_import.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
 import 'navigation.dart';
@@ -40,11 +41,24 @@ class RoutesScreen extends ConsumerWidget {
     final connected = ref.watch(trainerControllerProvider
         .select((s) => s.status == TrainerStatus.connected));
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _draw(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('Draw a route'),
-      ),
+      floatingActionButton: Column(mainAxisSize: MainAxisSize.min, children: [
+        FloatingActionButton.small(
+          heroTag: 'import-gpx',
+          tooltip: 'Import GPX',
+          onPressed: () async {
+            final r = await pickGpxRoute(context);
+            if (r != null) ref.read(routesProvider.notifier).add(r);
+          },
+          child: const Icon(Icons.upload_file),
+        ),
+        const SizedBox(height: 12),
+        FloatingActionButton.extended(
+          heroTag: 'draw-route',
+          onPressed: () => _draw(context, ref),
+          icon: const Icon(Icons.add),
+          label: const Text('Draw a route'),
+        ),
+      ]),
       body: routes.isEmpty
           ? const Center(
               child: Padding(
