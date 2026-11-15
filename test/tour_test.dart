@@ -14,7 +14,7 @@ import 'package:indoor_cycling/ui/tour_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'fakes/in_memory_ride_history_store.dart';
+import 'fakes/in_memory_json_store.dart';
 
 // Each stage is ~1.1 km north; stage n starts where n-1 ended.
 SavedRoute stage(String name, double lat0, {ElevationProfile? ele}) => SavedRoute(
@@ -90,11 +90,11 @@ void main() {
   });
 
   group('the tour controllers', () {
-    late InMemoryRideHistoryStore store;
+    late InMemoryJsonStore store;
     late FakeSource source;
 
     ProviderContainer make() {
-      store = InMemoryRideHistoryStore();
+      store = InMemoryJsonStore();
       source = FakeSource();
       final c = ProviderContainer(overrides: [
         tourStoreProvider.overrideWithValue(store),

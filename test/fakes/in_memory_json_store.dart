@@ -1,7 +1,7 @@
-import 'package:indoor_cycling/core/ride_history_store.dart';
+import 'package:indoor_cycling/core/json_store.dart';
 
-/// Second adapter for the RideHistoryStore seam.
-class InMemoryRideHistoryStore implements RideHistoryStore {
+/// Second adapter for the JsonStore seam.
+class InMemoryJsonStore implements JsonStore {
   final rides = <String, String>{};
 
   @override

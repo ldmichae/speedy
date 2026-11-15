@@ -17,7 +17,7 @@ import 'package:indoor_cycling/ui/tour_controller.dart';
 import 'package:indoor_cycling/ui/tour_screen.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'fakes/in_memory_ride_history_store.dart';
+import 'fakes/in_memory_json_store.dart';
 
 class _Blank extends TileProvider {
   static final _png = base64Decode(
@@ -45,7 +45,7 @@ void main() {
     t.view.physicalSize = const Size(800, 1600);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
-    final store = InMemoryRideHistoryStore()
+    final store = InMemoryJsonStore()
       ..rides['t1'] = jsonEncode(tour.toJson());
     final src = _Hills();
     await t.pumpWidget(ProviderScope(

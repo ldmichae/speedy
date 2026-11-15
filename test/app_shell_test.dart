@@ -16,7 +16,7 @@ import 'package:indoor_cycling/devices/trainer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes/in_memory_ble_transport.dart';
-import 'fakes/in_memory_ride_history_store.dart';
+import 'fakes/in_memory_json_store.dart';
 
 /// A trainer that is simply "connected": no timers, nothing to dispose.
 class _ConnectedTrainer extends TrainerController {
@@ -37,7 +37,7 @@ void main() {
     container = ProviderContainer(overrides: [
       bleTransportProvider.overrideWithValue(InMemoryBleTransport()),
       if (connected) trainerControllerProvider.overrideWith(_ConnectedTrainer.new),
-      rideHistoryStoreProvider.overrideWithValue(InMemoryRideHistoryStore()),
+      rideHistoryStoreProvider.overrideWithValue(InMemoryJsonStore()),
     ]);
     addTearDown(container.dispose);
     container.read(dockExpandedProvider); // load the stored choice

@@ -11,7 +11,7 @@ import 'package:indoor_cycling/ui/ride_chart.dart';
 import 'package:indoor_cycling/ui/ride_history_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'fakes/in_memory_ride_history_store.dart';
+import 'fakes/in_memory_json_store.dart';
 
 const desktop = Size(1400, 900);
 const portrait = Size(700, 1600);
@@ -22,7 +22,7 @@ RideRecord ride(DateTime at) => RideRecord(startedAt: at, samples: const [
     ]);
 
 Future<void> pumpAt(WidgetTester tester, Size size, Widget home,
-    {InMemoryRideHistoryStore? store}) async {
+    {InMemoryJsonStore? store}) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -36,8 +36,8 @@ Future<void> pumpAt(WidgetTester tester, Size size, Widget home,
   await tester.pumpAndSettle();
 }
 
-InMemoryRideHistoryStore twoRides() {
-  final store = InMemoryRideHistoryStore();
+InMemoryJsonStore twoRides() {
+  final store = InMemoryJsonStore();
   for (final r in [
     ride(DateTime(2026, 11, 13, 14, 5)),
     ride(DateTime(2026, 11, 12, 9, 30)),

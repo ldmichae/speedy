@@ -2,14 +2,14 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-import 'ride_history_store.dart';
+import 'json_store.dart';
 
-RideHistoryStore createStore({String dir = 'history'}) =>
-    FileRideHistoryStore(dir);
+JsonStore createStore(String dir, {bool webSupported = true}) =>
+    FileJsonStore(dir);
 
 /// One JSON file per ride under the app support folder's `history` directory.
-class FileRideHistoryStore implements RideHistoryStore {
-  FileRideHistoryStore([this.dirName = 'history']);
+class FileJsonStore implements JsonStore {
+  FileJsonStore(this.dirName);
   final String dirName;
 
   Future<Directory> _dir() async {

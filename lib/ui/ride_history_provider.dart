@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/ride_history_store.dart';
+import '../core/json_store.dart';
 import '../core/ride_record.dart';
 
 final rideHistoryStoreProvider =
-    Provider<RideHistoryStore>((ref) => createRideHistoryStore());
+    Provider<JsonStore>((ref) => createJsonStore('history', webSupported: false));
 
 /// Saved rides, newest first. Unreadable records are skipped rather than
 /// hiding the whole history.

@@ -1,11 +1,11 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'ride_history_store.dart';
+import 'json_store.dart';
 
-RideHistoryStore createStore({String dir = 'history'}) =>
-    dir == 'history' ? _UnsupportedStore() : _PrefsStore(dir);
+JsonStore createStore(String dir, {bool webSupported = true}) =>
+    webSupported ? _PrefsStore(dir) : _UnsupportedStore();
 
-class _UnsupportedStore implements RideHistoryStore {
+class _UnsupportedStore implements JsonStore {
   @override
   Future<void> save(String id, String json) async =>
       throw UnsupportedError('Ride history is not supported on web yet.');
@@ -21,7 +21,7 @@ class _UnsupportedStore implements RideHistoryStore {
 /// Web has no files, so other stores (tours) live in shared preferences.
 /// shortcut: browsers cap this at a few MB in total; tours of several
 /// hundred km can hit it. Upgrade to IndexedDB if that bites.
-class _PrefsStore implements RideHistoryStore {
+class _PrefsStore implements JsonStore {
   _PrefsStore(this.name);
   final String name;
   String get _index => '$name.index';

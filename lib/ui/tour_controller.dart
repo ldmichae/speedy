@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/elevation.dart';
-import '../core/ride_history_store.dart';
+import '../core/json_store.dart';
 import '../core/route_service.dart';
 import '../core/tour.dart';
 import 'elevation_service.dart';
 
 /// Overridable so tests do not touch the filesystem.
 final tourStoreProvider =
-    Provider<RideHistoryStore>((ref) => createTourStore());
+    Provider<JsonStore>((ref) => createJsonStore('tours'));
 
 final toursProvider =
     AsyncNotifierProvider<ToursController, List<Tour>>(ToursController.new);

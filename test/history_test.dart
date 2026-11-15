@@ -17,7 +17,7 @@ import 'package:indoor_cycling/ui/rider_profile_controller.dart';
 import 'package:indoor_cycling/ui/units_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'fakes/in_memory_ride_history_store.dart';
+import 'fakes/in_memory_json_store.dart';
 
 RideRecord ride(DateTime at, {double? kcal}) => RideRecord(
       startedAt: at,
@@ -29,8 +29,8 @@ RideRecord ride(DateTime at, {double? kcal}) => RideRecord(
       ],
     );
 
-InMemoryRideHistoryStore storeWith(List<RideRecord> rides) {
-  final store = InMemoryRideHistoryStore();
+InMemoryJsonStore storeWith(List<RideRecord> rides) {
+  final store = InMemoryJsonStore();
   for (final r in rides) {
     store.rides[r.id] = jsonEncode(r.toJson());
   }
@@ -62,13 +62,13 @@ void main() {
   });
 
   group('saving a ride', () {
-    late InMemoryRideHistoryStore store;
+    late InMemoryJsonStore store;
     late List<(int, DateTime, RideFormat)> exports;
     Object? exportFailure;
     late ProviderContainer c;
 
     setUp(() {
-      store = InMemoryRideHistoryStore();
+      store = InMemoryJsonStore();
       exports = [];
       exportFailure = null;
       c = ProviderContainer(overrides: [
@@ -211,8 +211,8 @@ void main() {
   });
 
   group('deleting rides', () {
-    Future<InMemoryRideHistoryStore> openList(
-        WidgetTester tester, InMemoryRideHistoryStore store) async {
+    Future<InMemoryJsonStore> openList(
+        WidgetTester tester, InMemoryJsonStore store) async {
       tester.view.physicalSize = const Size(900, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -291,7 +291,7 @@ void main() {
 
     /// Home -> history list -> detail of the ride titled [title].
     Future<void> openDetail(WidgetTester tester,
-        InMemoryRideHistoryStore store, String title) async {
+        InMemoryJsonStore store, String title) async {
       tester.view.physicalSize = const Size(900, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -561,7 +561,7 @@ void main() {
   });
 }
 
-class _FailingDeleteStore extends InMemoryRideHistoryStore {
+class _FailingDeleteStore extends InMemoryJsonStore {
   @override
   Future<void> delete(String id) async => throw StateError('disk is read-only');
 }
