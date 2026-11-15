@@ -9,6 +9,7 @@ import '../core/units.dart';
 import '../core/route_service.dart';
 import '../devices/trainer.dart';
 import 'elevation_chart.dart';
+import 'elevation_service.dart';
 import 'gpx_import.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
@@ -261,8 +262,7 @@ class _RouteEditorState extends ConsumerState<RouteEditor> {
       _elevError = null;
     });
     try {
-      final e =
-          await buildElevation(_draft(), ref.read(elevationSourceProvider));
+      final e = await ref.read(elevationServiceProvider).profile(_draft());
       if (mounted) setState(() => _elevation = e);
     } on ElevationRateLimited catch (e) {
       if (mounted) {

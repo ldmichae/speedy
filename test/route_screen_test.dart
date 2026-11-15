@@ -10,6 +10,7 @@ import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/ui/elevation_chart.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
+import 'package:indoor_cycling/ui/elevation_service.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/route_map.dart';
 import 'package:indoor_cycling/ui/route_screen.dart';

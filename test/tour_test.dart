@@ -8,6 +8,7 @@ import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/core/tour.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
+import 'package:indoor_cycling/ui/elevation_service.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/tour_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';

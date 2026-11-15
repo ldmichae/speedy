@@ -253,8 +253,3 @@ List<(double, LatLng)> samplePoints(SavedRoute route,
   out.add((len, route.path.last));
   return out;
 }
-
-/// Looks up the route's elevation profile.
-Future<ElevationProfile> buildElevation(
-        SavedRoute route, ElevationSource source) =>
-    source.profile(route);

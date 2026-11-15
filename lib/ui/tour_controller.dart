@@ -6,7 +6,7 @@ import '../core/elevation.dart';
 import '../core/ride_history_store.dart';
 import '../core/route_service.dart';
 import '../core/tour.dart';
-import 'route_controller.dart' show elevationSourceProvider;
+import 'elevation_service.dart';
 
 /// Overridable so tests do not touch the filesystem.
 final tourStoreProvider =
@@ -83,12 +83,8 @@ String stageKey(String tourId, int index) => '$tourId#$index';
 /// the rider taps Load again, and a rate limit blocks all lookups until it
 /// has passed.
 class TourElevation extends Notifier<Map<String, StageLoad>> {
-  DateTime? _blockedUntil;
-
   @override
-  Map<String, StageLoad> build() {
-    return {};
-  }
+  Map<String, StageLoad> build() => {};
 
   /// Called each second of a tour ride: have the stage you are in, and (from
   /// 70% through it) the next one, ready. A stage that already failed is left
@@ -118,21 +114,15 @@ class TourElevation extends Notifier<Map<String, StageLoad>> {
         tour.stage(index).elevation != null) {
       return;
     }
-    final until = _blockedUntil;
-    if (until != null && DateTime.now().isBefore(until)) {
-      _set(key, StageLoad.failed(_busy(until.difference(DateTime.now()))));
-      return;
-    }
+    final service = ref.read(elevationServiceProvider);
     _set(key, const StageLoad.loading());
     try {
-      final e =
-          await ref.read(elevationSourceProvider).profile(tour.stage(index));
+      final e = await service.profile(tour.stage(index));
       await ref
           .read(toursProvider.notifier)
           .setStageElevation(tourId, index, e);
       _set(key, null);
     } on ElevationRateLimited catch (e) {
-      _blockedUntil = DateTime.now().add(e.retryAfter);
       _set(key, StageLoad.failed(_busy(e.retryAfter)));
     } catch (_) {
       _set(key, const StageLoad.failed('Could not load elevation.'));
@@ -149,8 +139,7 @@ class TourElevation extends Notifier<Map<String, StageLoad>> {
     for (var i = 0; i < tour.stageCount; i++) {
       if (tour.stage(i).elevation != null) continue;
       await load(tourId, i);
-      final until = _blockedUntil;
-      if (until != null && DateTime.now().isBefore(until)) return;
+      if (ref.read(elevationServiceProvider).blockedFor != null) return;
     }
   }
 }

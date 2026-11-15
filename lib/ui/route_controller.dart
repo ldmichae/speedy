@@ -1,9 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,8 +8,6 @@ import '../core/prefs.dart';
 import '../core/ride_recording.dart';
 import '../core/route.dart';
 import '../core/route_service.dart';
-import '../core/terrain_cache.dart';
-import '../core/terrain_tiles.dart';
 import '../core/tour.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
@@ -21,21 +16,6 @@ import 'trainer_controller.dart';
 
 /// Overridable so tests never touch the network.
 final routeSnapperProvider = Provider<RouteSnapper>((ref) => OsrmSnapper());
-
-/// Terrain tiles first (cheap, cached, dense) on native; Open-Meteo when the
-/// tiles fail, and on web where a browser cannot read them. Overridable so
-/// tests never touch the network.
-final elevationSourceProvider = Provider<ElevationSource>((ref) {
-  final meteo = OpenMeteoElevation();
-  if (kIsWeb) return meteo;
-  final client = http.Client();
-  ref.onDispose(client.close);
-  return CompositeElevation(
-    TerrainTileElevation(
-        fetch: httpTileFetcher(client), cache: createTerrainCache()),
-    meteo,
-  );
-});
 
 final routesProvider =
     NotifierProvider<RoutesController, List<SavedRoute>>(RoutesController.new);
