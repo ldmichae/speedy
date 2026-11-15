@@ -172,9 +172,13 @@ class TrainerController extends Notifier<TrainerState> {
   Future<void> adjustTarget(int delta) => setTarget(state.targetWatts + delta);
 
   /// Simulation mode: the trainer applies road [gradePercent] as resistance.
-  /// Sending an ERG target (setTarget) switches back.
+  /// Sending an ERG target (setTarget) switches back. Callers may call this
+  /// every second: a change under 0.2% from what the trainer was last told
+  /// is not sent. Entering ERG clears the grade, so the next call always sends.
   Future<void> setGrade(double gradePercent) async {
     final g = TrainerSession.clampGrade(gradePercent);
+    final last = state.gradePercent;
+    if (last != null && (last - g).abs() < 0.2) return;
     state = state.copyWith(gradePercent: g);
     try {
       await _session?.setSimulation(g);

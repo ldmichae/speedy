@@ -47,6 +47,37 @@ void main() {
     expect(c.read(trainerControllerProvider).simulating, isFalse);
   });
 
+  test('setGrade ignores changes under 0.2% but re-sends after ERG', () async {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    final t = c.read(trainerControllerProvider.notifier);
+    await t.setGrade(4.0);
+    await t.setGrade(4.1);
+    expect(c.read(trainerControllerProvider).gradePercent, 4.0);
+    await t.setGrade(4.3);
+    expect(c.read(trainerControllerProvider).gradePercent, 4.3);
+    await t.setTarget(200); // ERG clears the grade
+    await t.setGrade(4.3);
+    expect(c.read(trainerControllerProvider).gradePercent, 4.3);
+  });
+
+  test('a plan and a simulation never own the target together', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    const plan = Plan('p', [PlanBlock([PlanStep(60, 150)])]);
+    c.read(routeRunProvider.notifier).start(route, simulate: true);
+    expect(c.read(targetLockProvider), TargetLock.simulation);
+
+    c.read(planRunProvider.notifier).start(plan, null);
+    expect(c.read(targetLockProvider), TargetLock.plan);
+    expect(c.read(routeRunProvider)!.simulate, isFalse);
+
+    c.read(routeRunProvider.notifier).start(route, simulate: true);
+    expect(c.read(planRunProvider), isNull);
+    expect(c.read(targetLockProvider), TargetLock.simulation);
+    c.read(recorderProvider.notifier).discard();
+  });
+
   test('a simulated ride follows the route grade, locks the target, then restores ERG', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);

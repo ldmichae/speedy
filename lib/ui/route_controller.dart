@@ -14,7 +14,6 @@ import '../core/route_service.dart';
 import '../core/terrain_cache.dart';
 import '../core/terrain_tiles.dart';
 import '../core/tour.dart';
-import '../devices/trainer_session.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'tour_controller.dart';
@@ -158,12 +157,7 @@ class RouteRunner extends Notifier<RouteRun?> {
     if (!r.simulate) return;
     // Flat at the finish, and wherever elevation has not loaded yet.
     final grade = meters >= len ? 0.0 : (r.course.gradeAt(meters) ?? 0.0);
-    final t = ref.read(trainerControllerProvider);
-    // Compared with what the trainer was last told, so a reconnect re-sends.
-    if (t.gradePercent == null ||
-        (t.gradePercent! - TrainerSession.clampGrade(grade)).abs() >= 0.2) {
-      ref.read(trainerControllerProvider.notifier).setGrade(grade);
-    }
+    ref.read(trainerControllerProvider.notifier).setGrade(grade);
   }
 
   /// Passing the end of a tour stage ticks it off.
