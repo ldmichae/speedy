@@ -5,9 +5,8 @@ import 'package:indoor_cycling/core/plan.dart';
 import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/devices/simulated/simulated_trainer.dart';
 import 'package:indoor_cycling/devices/trainer_session.dart';
-import 'package:indoor_cycling/ui/plan_controller.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
-import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -65,14 +64,14 @@ void main() {
     final c = ProviderContainer();
     addTearDown(c.dispose);
     const plan = Plan('p', [PlanBlock([PlanStep(60, 150)])]);
-    c.read(routeRunProvider.notifier).start(route, simulate: true);
+    c.read(rideSessionProvider.notifier).startRoute(route, simulate: true);
     expect(c.read(targetLockProvider), TargetLock.simulation);
 
-    c.read(planRunProvider.notifier).start(plan, null);
+    c.read(rideSessionProvider.notifier).startPlan(plan, null);
     expect(c.read(targetLockProvider), TargetLock.plan);
     expect(c.read(routeRunProvider)!.simulate, isFalse);
 
-    c.read(routeRunProvider.notifier).start(route, simulate: true);
+    c.read(rideSessionProvider.notifier).startRoute(route, simulate: true);
     expect(c.read(planRunProvider), isNull);
     expect(c.read(targetLockProvider), TargetLock.simulation);
     c.read(recorderProvider.notifier).discard();
@@ -81,12 +80,12 @@ void main() {
   test('a simulated ride follows the route grade, locks the target, then restores ERG', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.read(routeRunProvider.notifier).start(route, simulate: true);
+    c.read(rideSessionProvider.notifier).startRoute(route, simulate: true);
 
     expect(c.read(targetLockProvider), TargetLock.simulation);
     expect(c.read(trainerControllerProvider).gradePercent, closeTo(5, 0.2));
 
-    c.read(routeRunProvider.notifier).stop();
+    c.read(rideSessionProvider.notifier).stopRoute();
     expect(c.read(trainerControllerProvider).simulating, isFalse);
     expect(c.read(targetLockProvider), isNull);
     c.read(recorderProvider.notifier).discard();
@@ -95,7 +94,7 @@ void main() {
   test('a route without elevation cannot simulate', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.read(routeRunProvider.notifier).start(route.withElevation(null), simulate: true);
+    c.read(rideSessionProvider.notifier).startRoute(route.withElevation(null), simulate: true);
     expect(c.read(routeRunProvider)!.simulate, isFalse);
     expect(c.read(trainerControllerProvider).simulating, isFalse);
     c.read(recorderProvider.notifier).discard();
@@ -106,14 +105,14 @@ void main() {
     addTearDown(c.dispose);
     const plan = Plan('P', [PlanBlock([PlanStep(600, 150)])]);
 
-    c.read(routeRunProvider.notifier).start(route, simulate: true);
-    c.read(planRunProvider.notifier).start(plan, null);
+    c.read(rideSessionProvider.notifier).startRoute(route, simulate: true);
+    c.read(rideSessionProvider.notifier).startPlan(plan, null);
     expect(c.read(targetLockProvider), TargetLock.plan);
     expect(c.read(trainerControllerProvider).simulating, isFalse);
     expect(c.read(routeRunProvider), isNotNull); // the map carries on
 
-    c.read(routeRunProvider.notifier).stop();
-    c.read(routeRunProvider.notifier).start(route, simulate: true);
+    c.read(rideSessionProvider.notifier).stopRoute();
+    c.read(rideSessionProvider.notifier).startRoute(route, simulate: true);
     expect(c.read(planRunProvider), isNull);
     expect(c.read(targetLockProvider), TargetLock.simulation);
     c.read(recorderProvider.notifier).discard();

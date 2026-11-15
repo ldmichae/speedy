@@ -9,6 +9,7 @@ import 'route_controller.dart';
 import 'route_map.dart';
 import 'units_controller.dart';
 import 'navigation.dart';
+import 'ride_session.dart';
 
 enum MapElevation { below, overlay, none }
 
@@ -157,7 +158,7 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
                 IconButton.filledTonal(
                   tooltip: 'Stop route',
                   icon: const Icon(Icons.close),
-                  onPressed: ref.read(routeRunProvider.notifier).stop,
+                  onPressed: ref.read(rideSessionProvider.notifier).stopRoute,
                 ),
               ]),
             ),

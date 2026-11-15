@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/plan.dart';
 import 'package:indoor_cycling/ui/dashboard_view.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/history_screen.dart';
 import 'package:indoor_cycling/ui/home_screen.dart';
 import 'package:indoor_cycling/ui/navigation.dart';
@@ -133,7 +134,7 @@ await t.sendKeyEvent(LogicalKeyboardKey.space); // not while on History    expec
     expect(container.read(planRunProvider), isNotNull);
     expect(find.byType(DashboardView), findsOneWidget);
 
-    container.read(planRunProvider.notifier).stop();
+    container.read(rideSessionProvider.notifier).stopPlan();
     container.read(recorderProvider.notifier).discard();
   });
 }

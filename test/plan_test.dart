@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/plan.dart';
 import 'package:indoor_cycling/core/ride_recording.dart';
 import 'package:indoor_cycling/ui/plan_controller.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -76,26 +77,26 @@ void main() {
   test('start records, skip moves on, pause holds, end leaves the ride', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    final run = c.read(planRunProvider.notifier);
+    final run = c.read(rideSessionProvider.notifier);
     int target() => c.read(trainerControllerProvider).targetWatts;
     RecStatus rec() => c.read(recorderProvider).status;
 
-    run.start(plan, null);
+    run.startPlan(plan, null);
     expect(rec(), RecStatus.recording);
     expect(target(), 100);
 
-    run.skip(); // into the first ramp
+    run.skipPlanStep(); // into the first ramp
     expect(c.read(planRunProvider)!.step, 1);
     expect(target(), 100);
 
     c.read(recorderProvider.notifier).pause();
-    run.skip(); // paused: position moves, target is held
+    run.skipPlanStep(); // paused: position moves, target is held
     expect(c.read(planRunProvider)!.step, 2);
     expect(target(), 100);
     c.read(recorderProvider.notifier).resume();
     expect(target(), 100); // step 2 starts at 100
 
-    run.skip();
+    run.skipPlanStep();
     expect(c.read(planRunProvider), isNull);
     expect(rec(), RecStatus.recording);
 
@@ -105,7 +106,7 @@ void main() {
   test('ending the recording stops the plan', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.read(planRunProvider.notifier).start(plan, null);
+    c.read(rideSessionProvider.notifier).startPlan(plan, null);
     c.read(recorderProvider.notifier).discard();
     expect(c.read(planRunProvider), isNull);
   });

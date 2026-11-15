@@ -9,6 +9,7 @@ import 'package:indoor_cycling/core/units.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/core/tour.dart';
 import 'package:indoor_cycling/ui/elevation_chart.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/elevation_service.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/route_map.dart';
@@ -96,7 +97,7 @@ void main() {
     await open(t, const Scaffold(body: SizedBox(width: 600, height: 500, child: RouteMapTile())));
     final c = ProviderScope.containerOf(t.element(find.byType(RouteMapTile)));
     await c.read(toursProvider.future);
-    c.read(routeRunProvider.notifier).start(c.read(toursProvider).value!.single, stage: 1);
+    c.read(rideSessionProvider.notifier).startRoute(c.read(toursProvider).value!.single, stage: 1);
     await t.pump();
     final text = RouteMapTile.label(c.read(routeProgressProvider)!, UnitSystem.metric);
     expect(text, startsWith('Stage 2/2'));
@@ -105,6 +106,6 @@ void main() {
     // the stage you start on is prefetched at once, so its grade is already known
     expect(text, contains('%'));
     expect(text, isNot(contains('no elevation yet')));
-    c.read(routeRunProvider.notifier).stop();
+    c.read(rideSessionProvider.notifier).stopRoute();
   });
 }

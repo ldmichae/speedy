@@ -8,7 +8,6 @@ import '../core/tour.dart';
 import '../devices/trainer.dart';
 import 'elevation_chart.dart';
 import 'gpx_import.dart';
-import 'route_controller.dart';
 import 'route_map.dart';
 import 'route_screen.dart';
 import 'tour_controller.dart';
@@ -16,6 +15,7 @@ import 'tour_split_screen.dart';
 import 'navigation.dart';
 import 'trainer_controller.dart';
 import 'units_controller.dart';
+import 'ride_session.dart';
 
 class ToursScreen extends ConsumerWidget {
   const ToursScreen({super.key});
@@ -171,8 +171,8 @@ class TourScreen extends ConsumerWidget {
   void _ride(
       BuildContext context, WidgetRef ref, Tour tour, int stage, bool sim) {
     ref
-        .read(routeRunProvider.notifier)
-        .start(tour, simulate: sim, stage: stage);
+        .read(rideSessionProvider.notifier)
+        .startRoute(tour, simulate: sim, stage: stage);
     Navigator.of(context).popUntil((r) => r.isFirst);
     ref.read(pageProvider.notifier).state = AppPage.ride;
   }

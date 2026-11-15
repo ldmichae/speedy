@@ -8,14 +8,13 @@ import '../core/units.dart';
 import 'format.dart';
 import '../core/plan.dart';
 import 'metric_tile.dart';
-import 'plan_controller.dart';
-import 'route_controller.dart';
 import 'route_tile.dart';
 import 'recorder_controller.dart';
 import 'ride_chart.dart';
 import 'rider_profile_controller.dart';
 import 'trainer_controller.dart';
 import 'units_controller.dart';
+import 'ride_session.dart';
 
 String _whole(num? v) => v == null ? '—' : v.round().toString();
 

@@ -16,6 +16,7 @@ import 'route_map.dart';
 import 'navigation.dart';
 import 'trainer_controller.dart';
 import 'units_controller.dart';
+import 'ride_session.dart';
 
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
@@ -107,8 +108,8 @@ class RoutesScreen extends ConsumerWidget {
                             onPressed: connected
                                 ? () {
                                     ref
-                                        .read(routeRunProvider.notifier)
-                                        .start(r, simulate: true);
+                                        .read(rideSessionProvider.notifier)
+                                        .startRoute(r, simulate: true);
                                     ref.read(pageProvider.notifier).state =
                                         AppPage.ride;
                                   }
@@ -121,7 +122,7 @@ class RoutesScreen extends ConsumerWidget {
                           icon: const Icon(Icons.play_arrow),
                           onPressed: connected
                               ? () {
-                                  ref.read(routeRunProvider.notifier).start(r);
+                                  ref.read(rideSessionProvider.notifier).startRoute(r);
                                   ref.read(pageProvider.notifier).state =
                                       AppPage.ride;
                                 }

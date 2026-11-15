@@ -8,6 +8,7 @@ import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/core/tour.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/elevation_service.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/tour_controller.dart';
@@ -183,7 +184,7 @@ void main() {
       final t0 = c.read(toursProvider).value!.single;
       final one = t0.stage(0).lengthMeters;
 
-      c.read(routeRunProvider.notifier).start(t0, simulate: true);
+      c.read(rideSessionProvider.notifier).startRoute(t0, simulate: true);
       await settle();
       expect(source.calls, 1); // stage 1 itself
       expect(c.read(toursProvider).value!.single.stage(0).elevation, isNotNull);
@@ -204,7 +205,7 @@ void main() {
       c.read(meters.notifier).state = one + 50;
       await tick(c);
       expect(c.read(toursProvider).value!.single.completed, contains(0));
-      c.read(routeRunProvider.notifier).stop();
+      c.read(rideSessionProvider.notifier).stopRoute();
       c.read(recorderProvider.notifier).discard();
     });
 
@@ -214,7 +215,7 @@ void main() {
       await c.read(toursProvider.future);
       await c.read(toursProvider.notifier).upsert(tour);
       final t0 = c.read(toursProvider).value!.single;
-      c.read(routeRunProvider.notifier).start(t0, stage: 2);
+      c.read(rideSessionProvider.notifier).startRoute(t0, stage: 2);
       final p = c.read(routeProgressProvider)!;
       expect(p.stage, 2);
       expect(p.meters, closeTo(t0.stageStart(2), 1e-6));

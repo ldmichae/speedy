@@ -11,6 +11,7 @@ import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'navigation.dart';
 import 'trainer_controller.dart';
+import 'ride_session.dart';
 
 class PlansScreen extends ConsumerWidget {
   const PlansScreen({super.key});
@@ -67,7 +68,7 @@ class PlansScreen extends ConsumerWidget {
                       icon: const Icon(Icons.play_arrow),
                       onPressed: connected && (!p.percent || ftp != null)
                           ? () {
-                              ref.read(planRunProvider.notifier).start(p, ftp);
+                              ref.read(rideSessionProvider.notifier).startPlan(p, ftp);
                               ref.read(pageProvider.notifier).state = AppPage.ride;
                             }
                           : null,
@@ -311,7 +312,7 @@ class PlanBar extends ConsumerWidget {
         recorderProvider.select((r) => r.status != RecStatus.recording));
     final connected = ref.watch(trainerControllerProvider
         .select((s) => s.status == TrainerStatus.connected));
-    final c = ref.read(planRunProvider.notifier);
+    final c = ref.read(rideSessionProvider.notifier);
     final rec = ref.read(recorderProvider.notifier);
     final left = run.steps.endOf(step) - run.elapsed;
     final s = run.steps[step];
@@ -338,11 +339,11 @@ class PlanBar extends ConsumerWidget {
             IconButton(
                 tooltip: 'Skip step',
                 icon: const Icon(Icons.skip_next),
-                onPressed: c.skip),
+                onPressed: c.skipPlanStep),
             IconButton(
                 tooltip: 'Stop plan (keeps recording)',
                 icon: const Icon(Icons.stop),
-                onPressed: c.stop),
+                onPressed: c.stopPlan),
           ]),
           LinearProgressIndicator(value: run.elapsed / run.steps.totalSeconds),
         ]),

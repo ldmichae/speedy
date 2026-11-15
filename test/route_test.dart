@@ -7,6 +7,7 @@ import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/units.dart';
 import 'package:indoor_cycling/core/route_service.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -131,7 +132,7 @@ void main() {
   test('riding starts recording, begins at the start, ends with the ride', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
-    c.read(routeRunProvider.notifier).start(route);
+    c.read(rideSessionProvider.notifier).startRoute(route);
     expect(c.read(recorderProvider).status, RecStatus.recording);
     final p = c.read(routeProgressProvider)!;
     expect(p.meters, 0);

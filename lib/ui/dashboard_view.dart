@@ -13,11 +13,11 @@ import 'focus_views.dart';
 import 'layout.dart';
 import 'ride_view_controller.dart';
 import 'navigation.dart';
-import 'route_controller.dart';
 import 'plan_screen.dart';
 import 'recorder_controller.dart';
 import 'recording_panel.dart';
 import 'trainer_controller.dart';
+import 'ride_session.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
