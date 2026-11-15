@@ -157,6 +157,12 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         ? null
         : Text(error, style: TextStyle(color: theme.colorScheme.error));
 
+    final header = [
+      const PlanBar(),
+      WorkoutBar(trailing: _viewMenu(deviceName, view)),
+      const SizedBox(height: 12),
+    ];
+
     return LayoutBuilder(builder: (context, box) {
       final compact = !isWideLayout(box.maxWidth);
 
@@ -171,9 +177,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             ],
             outlined(Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const PlanBar(),
-              WorkoutBar(trailing: _viewMenu(deviceName, view)),
-              const SizedBox(height: 12),
+              ...header,
               DashboardGrid(editing: _editing, compact: compact),
             ])),
             if (errorText != null) ...[const SizedBox(height: 12), errorText],
@@ -193,9 +197,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                 child: outlined(Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const PlanBar(),
-                      WorkoutBar(trailing: _viewMenu(deviceName, view)),
-                      const SizedBox(height: 12),
+                      ...header,
                       Expanded(
                           child: view == RideView.map
                               ? const MapFocus()
