@@ -10,6 +10,7 @@ import 'layout.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'rider_profile_controller.dart';
+import 'update_banner.dart';
 import 'units_controller.dart';
 
 /// Set-and-forget settings. Add a new setting as another [_Section].
@@ -75,6 +76,11 @@ class PreferencesScreen extends ConsumerWidget {
       description: 'Like the app? A coffee helps keep it going.',
       child: CoffeeButton(),
     );
+    const updatesSection = _Section(
+      title: 'Updates',
+      description: 'The app also checks for a new release when it starts.',
+      child: UpdateCheckButton(),
+    );
     const creditsSection = _Section(
       title: 'Credits',
       description: 'Map, route and elevation data come from these projects. '
@@ -110,12 +116,12 @@ class PreferencesScreen extends ConsumerWidget {
                   if (wide)
                     // Short settings on the left, the longer profile form on the right.
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: stack([appearance, recording, training, supportSection, creditsSection])),
+                      Expanded(child: stack([appearance, recording, training, updatesSection, supportSection, creditsSection])),
                       const SizedBox(width: 24),
                       Expanded(child: stack([units, profile])),
                     ])
                   else
-                    stack([appearance, recording, training, units, profile, supportSection, creditsSection]),
+                    stack([appearance, recording, training, units, profile, updatesSection, supportSection, creditsSection]),
                 ],
               ),
             ),

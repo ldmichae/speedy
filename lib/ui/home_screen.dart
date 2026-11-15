@@ -12,6 +12,7 @@ import 'preferences_screen.dart';
 import 'route_screen.dart';
 import 'tour_screen.dart';
 import 'trainer_controller.dart';
+import 'update_banner.dart';
 
 /// The app's frame: a left dock that leads to every page, and the page.
 /// Wide windows get the dock beside the page (icons only, or with labels);
@@ -49,6 +50,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ],
     );
 
+    final content = Column(children: [
+      const UpdateBanner(),
+      Expanded(child: body),
+    ]);
+
     return LayoutBuilder(builder: (context, box) {
       if (box.maxWidth >= dockMinWidth) {
         return Scaffold(
@@ -56,7 +62,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Row(children: [
               const _Dock(),
               const VerticalDivider(width: 1),
-              Expanded(child: body),
+              Expanded(child: content),
             ]),
           ),
         );
@@ -67,7 +73,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           title: Text(page.label),
         ),
         drawer: const _DockDrawer(),
-        body: SafeArea(child: body),
+        body: SafeArea(child: content),
       );
     });
   }
