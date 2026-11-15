@@ -123,6 +123,37 @@ void main() {
       expect(store.rides, hasLength(1)); // same id, not a duplicate
       expect(c.read(recorderProvider).status, RecStatus.idle);
     });
+
+    test('stopping with nothing recorded discards without asking', () {
+      final rec = c.read(recorderProvider.notifier);
+      expect(rec.requestStop(), isNull);
+      expect(c.read(recorderProvider).status, RecStatus.idle);
+    });
+
+    test('keep riding resumes only a ride that was running', () async {
+      final rec = c.read(recorderProvider.notifier)..start();
+      var summary = rec.requestStop()!;
+      expect(c.read(recorderProvider).status, RecStatus.paused);
+      await rec.finish(StopChoice.keepGoing, summary);
+      expect(c.read(recorderProvider).status, RecStatus.recording);
+
+      rec.pause();
+      summary = rec.requestStop()!;
+      await rec.finish(StopChoice.keepGoing, summary);
+      expect(c.read(recorderProvider).status, RecStatus.paused);
+    });
+
+    test('finish saves or discards', () async {
+      final rec = c.read(recorderProvider.notifier)..start();
+      final summary = rec.requestStop()!;
+      expect(await rec.finish(StopChoice.save, summary), endsWith('.fit'));
+      expect(store.rides, hasLength(1));
+
+      rec.start();
+      await rec.finish(StopChoice.discard, rec.requestStop()!);
+      expect(c.read(recorderProvider).status, RecStatus.idle);
+      expect(store.rides, hasLength(1));
+    });
   });
 
   group('screens', () {

@@ -62,18 +62,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     }
   }
 
-  void _toggleRecording() {
-    final recorder = ref.read(recorderProvider.notifier);
-    switch (ref.read(recorderProvider).status) {
-      case RecStatus.idle:
-        recorder.start();
-      case RecStatus.recording:
-        recorder.pause();
-      case RecStatus.paused:
-        recorder.resume();
-    }
-  }
-
   /// Disconnecting mid-ride pauses the recording, so it asks first.
   Future<void> _disconnect() async {
     if (ref.read(recorderProvider).status != RecStatus.idle) {
@@ -228,7 +216,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         bindings: _editing
             ? const {}
             : {
-                const SingleActivator(LogicalKeyboardKey.space): _guarded(_toggleRecording),
+                const SingleActivator(LogicalKeyboardKey.space): _guarded(ref.read(recorderProvider.notifier).toggle),
                 const SingleActivator(LogicalKeyboardKey.arrowUp): _guarded(() =>
                     _nudge(5)),
                 const SingleActivator(LogicalKeyboardKey.arrowDown): _guarded(() =>

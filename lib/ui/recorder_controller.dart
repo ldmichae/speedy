@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/power_fun.dart';
 import '../core/prefs.dart';
 import '../core/ride_export.dart';
 import '../core/ride_record.dart';
@@ -27,6 +28,20 @@ class RecordingState {
   /// published every tick, so watchers rebuild.
   final List<RideSample> samples;
   final Duration elapsed;
+}
+
+enum StopChoice { save, discard, keepGoing }
+
+/// What the rider sees when ending a ride, from [RecorderController.requestStop].
+class StopSummary {
+  const StopSummary(
+      {required this.stats, required this.joules, required this.wasRecording});
+
+  final RideStats stats;
+  final double joules;
+
+  /// Whether the ride was running (not already paused) when Stop was pressed.
+  final bool wasRecording;
 }
 
 final recorderProvider =
@@ -110,6 +125,49 @@ class RecorderController extends Notifier<RecordingState> {
         resume();
       case RecStatus.recording:
     }
+  }
+
+  /// Start, pause or resume, whichever the current status calls for.
+  void toggle() {
+    if (_recording.status == RecStatus.recording) {
+      pause();
+    } else {
+      startOrResume();
+    }
+  }
+
+  /// First half of ending a ride: pauses, and returns what the rider must
+  /// decide on. Null when nothing was recorded, in which case it has already
+  /// discarded. Follow with [finish].
+  StopSummary? requestStop() {
+    final wasRecording = _recording.status == RecStatus.recording;
+    pause();
+    final samples = List.of(_recording.samples);
+    if (samples.isEmpty) {
+      discard();
+      return null;
+    }
+    return StopSummary(
+      stats: RideStats.of(samples,
+          kcal: rideKcal(samples, ref.read(riderProfileProvider))),
+      joules: rideJoules(samples),
+      wasRecording: wasRecording,
+    );
+  }
+
+  /// Second half: applies the rider's [choice]. Returns the export path for
+  /// [StopChoice.save] (throws if saving fails, keeping the recording so the
+  /// rider can retry or discard), otherwise null.
+  Future<String?> finish(StopChoice choice, StopSummary summary) async {
+    switch (choice) {
+      case StopChoice.save:
+        return save();
+      case StopChoice.discard:
+        discard();
+      case StopChoice.keepGoing:
+        if (summary.wasRecording) resume();
+    }
+    return null;
   }
 
   void pause() {

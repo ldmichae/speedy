@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/ride_recording.dart';
-import '../core/ride_stats.dart';
 import 'format.dart';
-import '../core/power_fun.dart';
 import 'power_fun.dart';
 import 'recorder_controller.dart';
-import 'rider_profile_controller.dart';
 
 /// Timer and record/pause/stop controls. Always visible, so starting a ride
 /// does not move anything on screen.
@@ -19,19 +16,10 @@ class WorkoutBar extends ConsumerWidget {
 
   Future<void> _stop(BuildContext context, WidgetRef ref) async {
     final c = ref.read(recorderProvider.notifier);
-    final rec = ref.read(recorderProvider);
-    final wasRecording = rec.status == RecStatus.recording;
-    c.pause();
+    final summary = c.requestStop();
+    if (summary == null) return;
 
-    if (rec.samples.isEmpty) {
-      c.discard();
-      return;
-    }
-
-    final stats = RideStats.of(rec.samples,
-        kcal: rideKcal(rec.samples, ref.read(riderProfileProvider)));
-
-    final choice = await showDialog<_StopChoice>(
+    final choice = await showDialog<StopChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('End ride?'),
@@ -39,9 +27,9 @@ class WorkoutBar extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            RideStatRow(stats: stats),
+            RideStatRow(stats: summary.stats),
             const SizedBox(height: 12),
-            PowerFun(joules: rideJoules(rec.samples), title: 'This ride'),
+            PowerFun(joules: summary.joules, title: 'This ride'),
             const SizedBox(height: 12),
             Text('Saves to history and exports as '
                 '${ref.read(rideFormatProvider).label} (change in Preferences).'),
@@ -49,33 +37,28 @@ class WorkoutBar extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, _StopChoice.keepGoing),
+              onPressed: () => Navigator.pop(ctx, StopChoice.keepGoing),
               child: const Text('Keep riding')),
           TextButton(
-              onPressed: () => Navigator.pop(ctx, _StopChoice.discard),
+              onPressed: () => Navigator.pop(ctx, StopChoice.discard),
               child: const Text('Discard')),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, _StopChoice.save),
+              onPressed: () => Navigator.pop(ctx, StopChoice.save),
               child: const Text('Save')),
         ],
       ),
     );
     if (!context.mounted) return;
 
-    switch (choice) {
-      case _StopChoice.save:
-        final messenger = ScaffoldMessenger.of(context);
-        try {
-          final path = await c.save();
-          messenger.showSnackBar(SnackBar(content: Text('Saved to $path')));
-        } catch (e) {
-          // Recording is intact; the user can retry or discard.
-          messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
-        }
-      case _StopChoice.discard:
-        c.discard();
-      case _StopChoice.keepGoing || null:
-        if (wasRecording) c.resume();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await c.finish(choice ?? StopChoice.keepGoing, summary);
+      if (path != null) {
+        messenger.showSnackBar(SnackBar(content: Text('Saved to $path')));
+      }
+    } catch (e) {
+      // Recording is intact; the user can retry or discard.
+      messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
     }
   }
 
@@ -169,5 +152,3 @@ class WorkoutBar extends ConsumerWidget {
     );
   }
 }
-
-enum _StopChoice { save, discard, keepGoing }
