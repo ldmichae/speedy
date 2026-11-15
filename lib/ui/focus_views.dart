@@ -41,7 +41,11 @@ class MetricStrip extends StatelessWidget {
             ],
           ]),
         );
-    const big = [(TileKind.powerAvg, 3), (TileKind.ergTarget, 2)];
+    const big = [
+      (TileKind.powerAvg, 3),
+      (TileKind.ergTarget, 2),
+      (TileKind.time, 1),
+    ];
     const small = [
       (TileKind.cadence, 1),
       (TileKind.speed, 1),

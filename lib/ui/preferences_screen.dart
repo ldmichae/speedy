@@ -7,9 +7,11 @@ import '../core/units.dart';
 import 'app_palette.dart';
 import 'credits.dart';
 import 'layout.dart';
+import 'navigation.dart';
 import 'plan_controller.dart';
 import 'recorder_controller.dart';
 import 'rider_profile_controller.dart';
+import 'trainer_controller.dart';
 import 'update_banner.dart';
 import 'units_controller.dart';
 
@@ -22,8 +24,12 @@ class PreferencesScreen extends ConsumerWidget {
     final format = ref.watch(rideFormatProvider);
     final appearance = const _Section(
       title: 'Appearance',
-      description: 'Colour palette for the app.',
-      child: PaletteChooser(),
+      description: 'Colour palette and brightness for the app.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        ThemeModeChooser(),
+        SizedBox(height: 16),
+        PaletteChooser(),
+      ]),
     );
     final recording = _Section(
       title: 'Recording',
@@ -94,6 +100,23 @@ class PreferencesScreen extends ConsumerWidget {
       child: _FtpField(),
     );
 
+    final developer = _Section(
+      title: 'Developer',
+      description: 'Ride without a trainer: a simulated one produces '
+          'readings, so you can try the app or test a change.',
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: () {
+            ref.read(trainerControllerProvider.notifier).connectSimulated();
+            ref.read(pageProvider.notifier).state = AppPage.ride;
+          },
+          icon: const Icon(Icons.science_outlined),
+          label: const Text('Use simulated trainer'),
+        ),
+      ),
+    );
+
     Widget stack(List<Widget> sections) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -116,12 +139,12 @@ class PreferencesScreen extends ConsumerWidget {
                   if (wide)
                     // Short settings on the left, the longer profile form on the right.
                     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: stack([appearance, recording, training, updatesSection, supportSection, creditsSection])),
+                      Expanded(child: stack([appearance, recording, training, updatesSection, supportSection, creditsSection, developer])),
                       const SizedBox(width: 24),
                       Expanded(child: stack([units, profile])),
                     ])
                   else
-                    stack([appearance, recording, training, units, profile, updatesSection, supportSection, creditsSection]),
+                    stack([appearance, recording, training, units, profile, updatesSection, supportSection, creditsSection, developer]),
                 ],
               ),
             ),

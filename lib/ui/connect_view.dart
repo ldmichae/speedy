@@ -34,12 +34,6 @@ class ConnectView extends ConsumerWidget {
           icon: const Icon(Icons.bluetooth_searching),
           label: Text(s.scanning ? 'Scanning…' : 'Find trainer'),
         ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: busy ? null : c.connectSimulated,
-          icon: const Icon(Icons.science_outlined),
-          label: const Text('Use simulated trainer'),
-        ),
         if (busy) ...[
           const SizedBox(height: 24),
           Row(children: [
@@ -67,6 +61,15 @@ class ConnectView extends ConsumerWidget {
           Text(
             s.error!,
             style: TextStyle(color: theme.colorScheme.error),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            kIsWeb
+                ? 'Check that Bluetooth is on and the trainer is awake, then '
+                    'try Find trainer again.'
+                : 'Check that Bluetooth is on, the trainer is awake, and no '
+                    'other app is connected to it, then try again.',
+            style: theme.textTheme.bodyMedium,
           ),
         ],
       ],

@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 
+/// The big number on every tile.
+const metricNumberStyle = TextStyle(
+  fontSize: 48,
+  fontWeight: FontWeight.w600,
+  height: 1.0,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
 /// A labelled number that fills whatever space it is given: the number scales
 /// up as the tile grows and down as it shrinks. Tabular figures keep digits
 /// from jittering as values change.
@@ -42,15 +50,7 @@ class MetricTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w600,
-                        height: 1.0,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
+                    Text(value, style: metricNumberStyle),
                     const SizedBox(width: 6),
                     // A blank value has no use for its unit, so the reason
                     // takes its place and scales with the number.

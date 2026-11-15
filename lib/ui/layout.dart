@@ -1,3 +1,15 @@
+import 'package:flutter/material.dart';
+
+/// Phones and tablets are used by touch, often mid-effort on a stand, so
+/// controls there get the 48 px Material minimum. Desktop keeps the slim bar.
+bool isTouchUi(BuildContext context) => switch (Theme.of(context).platform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.fuchsia =>
+        true,
+      _ => false,
+    };
+
 /// Windows at least this wide (desktop or tablet landscape) get side-by-side
 /// layouts; narrower ones, including portrait, stack vertically.
 const wideLayoutMinWidth = 1000.0;

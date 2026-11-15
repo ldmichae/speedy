@@ -12,6 +12,7 @@ import 'package:indoor_cycling/ui/dashboard_view.dart';
 import 'package:indoor_cycling/ui/focus_views.dart';
 import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/recording_panel.dart';
+import 'package:indoor_cycling/ui/ride_view_controller.dart';
 import 'package:indoor_cycling/ui/ride_chart.dart';
 import 'package:indoor_cycling/ui/rider_profile_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
@@ -127,13 +128,14 @@ void main() {
         (tester) async {
       await openDashboard(tester);
 
-      expect(find.text('Ready to ride'), findsOneWidget);
+      expect(find.text('Record'), findsOneWidget);
       for (final k in [
         TileKind.powerAvg,
         TileKind.ergTarget,
         TileKind.cadence,
         TileKind.speed,
         TileKind.heartRate,
+        TileKind.time,
       ]) {
         expect(tile(k), findsOneWidget, reason: k.name);
       }
@@ -142,7 +144,6 @@ void main() {
         TileKind.avgPower,
         TileKind.energy,
         TileKind.chart,
-        TileKind.time,
       ]) {
         expect(tile(k), findsNothing, reason: k.name);
       }
@@ -163,7 +164,7 @@ void main() {
       ]) {
         expect(tile(k), findsOneWidget, reason: k.name);
       }
-      expect(tile(TileKind.time), findsNothing); // the bar owns elapsed time
+      expect(tile(TileKind.time), findsOneWidget);
       expect(find.byType(RideChart), findsOneWidget);
       expect(find.text('Pause'), findsOneWidget);
 
@@ -183,7 +184,7 @@ void main() {
       expect(recStatus(c), RecStatus.idle);
       expect(tile(TileKind.chart), findsNothing);
       expect(tile(TileKind.distance), findsNothing);
-      expect(find.text('Ready to ride'), findsOneWidget);
+      expect(find.text('Record'), findsOneWidget);
     });
 
     testWidgets('pausing keeps the totals and chart on screen', (tester) async {
@@ -530,7 +531,7 @@ void main() {
         top(find.byType(WorkoutBar)),
         top(tile(TileKind.powerAvg)),
         top(tile(TileKind.ergTarget)),
-        top(tile(TileKind.cadence)),
+        top(tile(TileKind.speed)),
         top(tile(TileKind.chart)), // the right side starts below the left
         top(tile(TileKind.distance)),
       ];
@@ -547,13 +548,13 @@ void main() {
       await record(tester);
 
       final bar = tester.getRect(find.byType(WorkoutBar));
-      for (final k in [TileKind.powerAvg, TileKind.ergTarget, TileKind.chart]) {
+      for (final k in [TileKind.powerAvg, TileKind.chart]) {
         final r = rect(tester, k);
         expect(r.left, closeTo(bar.left, 0.5), reason: k.name);
         expect(r.width, closeTo(bar.width, 0.5), reason: k.name);
       }
       for (final row in [
-        [TileKind.cadence, TileKind.speed, TileKind.heartRate],
+        [TileKind.speed, TileKind.heartRate, TileKind.time],
         [TileKind.distance, TileKind.avgPower, TileKind.energy],
       ]) {
         final r = [for (final k in row) rect(tester, k)];
@@ -578,7 +579,7 @@ void main() {
       final erg = rect(tester, TileKind.ergTarget);
       final chart = rect(tester, TileKind.chart);
       final distance = rect(tester, TileKind.distance);
-      final cadence = rect(tester, TileKind.cadence);
+      final cadence = rect(tester, TileKind.time);
 
       expect(power.left, closeTo(bar.left, 0.5));
       expect(chart.right, closeTo(bar.right, 0.5));
@@ -599,7 +600,7 @@ void main() {
       await record(tester);
 
       final small = [
-        for (final k in [TileKind.cadence, TileKind.speed, TileKind.heartRate])
+        for (final k in [TileKind.speed, TileKind.heartRate, TileKind.time])
           rect(tester, k)
       ];
       final side = rect(tester, TileKind.powerAvg);
@@ -905,7 +906,7 @@ void main() {
         final c = await openDashboard(tester);
         await startEditing(tester);
         final power = rect(tester, TileKind.powerAvg);
-        final lastRow = rect(tester, TileKind.cadence); // the three small tiles
+        final lastRow = rect(tester, TileKind.speed); // the last row of small tiles
 
         final (g, grabbed) = await grab(tester, TileKind.heartRate);
         await dragCorner(tester, g, grabbed, Offset(power.left, lastRow.bottom + 24));
@@ -914,7 +915,7 @@ void main() {
 
         // Heart rate takes the first slot of the last row; the others move on.
         expect(leftOf(c).sublist(2, 5),
-            [TileKind.heartRate, TileKind.cadence, TileKind.speed]);
+            [TileKind.cadence, TileKind.heartRate, TileKind.speed]);
         expect(rect(tester, TileKind.heartRate).left, closeTo(power.left, 0.5));
         expect(rect(tester, TileKind.heartRate).top, closeTo(lastRow.top, 0.5));
       });
@@ -1098,7 +1099,8 @@ void main() {
       testWidgets('$name view at $size fits without scrolling, no editable grid',
           (tester) async {
         await openDashboard(tester, size: size);
-        await menuTap(tester, name);
+        await tester.tap(find.descendant(
+            of: find.byType(SegmentedButton<RideView>), matching: find.text(name)));
         await tester.pumpAndSettle();
 
         expect(find.byType(MetricStrip), findsOneWidget);

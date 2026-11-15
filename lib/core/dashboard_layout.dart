@@ -7,7 +7,7 @@ enum TileKind {
   cadence('Cadence'),
   speed('Speed'),
   heartRate('Heart rate'),
-  time('Time', rideOnly: true),
+  time('Time'),
   distance('Distance', rideOnly: true),
   avgPower('Avg power', rideOnly: true),
   energy('Energy', rideOnly: true),
@@ -89,10 +89,11 @@ class DashboardLayout {
   static const standard = DashboardLayout(
     left: [
       TileConfig(TileKind.powerAvg, 3, 2),
-      TileConfig(TileKind.ergTarget, 3, 1),
+      TileConfig(TileKind.ergTarget, 2, 1),
       TileConfig(TileKind.cadence, 1, 1),
       TileConfig(TileKind.speed, 1, 1),
       TileConfig(TileKind.heartRate, 1, 1),
+      TileConfig(TileKind.time, 1, 1),
     ],
     right: [
       TileConfig(TileKind.chart, 3, 3),

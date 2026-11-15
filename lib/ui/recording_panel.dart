@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/ride_recording.dart';
 import 'format.dart';
+import 'layout.dart';
 import 'power_fun.dart';
 import 'recorder_controller.dart';
 
@@ -58,7 +59,9 @@ class WorkoutBar extends ConsumerWidget {
       }
     } catch (e) {
       // Recording is intact; the user can retry or discard.
-      messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      messenger.showSnackBar(SnackBar(
+          content: Text("Couldn't save the ride ($e). Your recording is "
+              'kept: press Stop to try again, or Discard.')));
     }
   }
 
@@ -68,87 +71,57 @@ class WorkoutBar extends ConsumerWidget {
     final c = ref.read(recorderProvider.notifier);
     final theme = Theme.of(context);
 
-    // Slim, to leave the room to the map and chart. Space does the same as
-    // Record, Pause and Resume.
-    const size = Size(0, 36);
-    final fill = FilledButton.styleFrom(minimumSize: size);
-    final outline = OutlinedButton.styleFrom(minimumSize: size);
+    // One large control does Record, Pause and Resume (so does Space); Stop
+    // stands apart from it, so a mis-tap on the big button never ends a ride.
+    final touch = isTouchUi(context);
+    final big = Size(0, touch ? 64 : 48);
+    final label = theme.textTheme.titleMedium;
 
-    Widget stop() => Tooltip(
+    final primary = switch (rec.status) {
+      RecStatus.idle => Tooltip(
+          message: 'Start recording (Space)',
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: big, textStyle: label),
+            onPressed: c.start,
+            icon: const Icon(Icons.fiber_manual_record),
+            label: const Text('Record'),
+          ),
+        ),
+      RecStatus.recording => Tooltip(
+          message: 'Pause (Space)',
+          child: FilledButton.tonalIcon(
+            style: FilledButton.styleFrom(minimumSize: big, textStyle: label),
+            onPressed: c.pause,
+            icon: const Icon(Icons.pause),
+            label: const Text('Pause'),
+          ),
+        ),
+      RecStatus.paused => Tooltip(
+          message: 'Resume (Space)',
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: big, textStyle: label),
+            onPressed: c.resume,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Resume'),
+          ),
+        ),
+    };
+
+    return Row(children: [
+      Expanded(child: primary),
+      if (rec.status != RecStatus.idle) ...[
+        SizedBox(width: touch ? 24 : 12),
+        Tooltip(
           message: 'Stop and save or discard',
           child: OutlinedButton.icon(
-            style: outline,
+            style: OutlinedButton.styleFrom(minimumSize: Size(0, big.height)),
             onPressed: () => _stop(context, ref),
             icon: const Icon(Icons.stop),
             label: const Text('Stop'),
           ),
-        );
-
-    final controls = switch (rec.status) {
-      RecStatus.idle => [
-          Tooltip(
-            message: 'Start recording (Space)',
-            child: FilledButton.icon(
-              style: fill,
-              onPressed: c.start,
-              icon: const Icon(Icons.fiber_manual_record),
-              label: const Text('Record'),
-            ),
-          ),
-        ],
-      RecStatus.recording => [
-          Tooltip(
-            message: 'Pause (Space)',
-            child: FilledButton.tonalIcon(
-              style: fill,
-              onPressed: c.pause,
-              icon: const Icon(Icons.pause),
-              label: const Text('Pause'),
-            ),
-          ),
-          stop(),
-        ],
-      RecStatus.paused => [
-          Tooltip(
-            message: 'Resume (Space)',
-            child: FilledButton.icon(
-              style: fill,
-              onPressed: c.resume,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Resume'),
-            ),
-          ),
-          stop(),
-        ],
-    };
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Row(children: [
-          if (rec.status == RecStatus.recording)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Icon(Icons.circle, size: 12, color: theme.colorScheme.error),
-            ),
-          Text(
-            switch (rec.status) {
-              RecStatus.idle => 'Ready to ride',
-              RecStatus.paused => 'Paused  ${clock(rec.elapsed)}',
-              RecStatus.recording => clock(rec.elapsed),
-            },
-            style: rec.status == RecStatus.idle
-                ? theme.textTheme.titleMedium
-                : theme.textTheme.titleLarge?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-          ),
-          const Spacer(),
-          Wrap(spacing: 8, children: controls),
-          if (trailing != null) trailing!,
-        ]),
-      ),
-    );
+        ),
+      ],
+      if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+    ]);
   }
 }

@@ -6,6 +6,7 @@ import '../core/ride_stats.dart';
 import '../core/target_status.dart';
 import '../core/units.dart';
 import 'format.dart';
+import 'layout.dart';
 import '../core/plan.dart';
 import 'metric_tile.dart';
 import 'route_tile.dart';
@@ -102,11 +103,18 @@ class DashboardTile extends ConsumerWidget {
 }
 
 /// Status colours for "how am I doing against the target". On target uses the
-/// theme's own container pair; off target is a dark amber pair (about 8:1),
-/// since the theme has no warning role. Direction is also carried by an
-/// arrow and a sign, never by colour alone.
-const _warnContainer = Color(0xFF4A3B00);
-const _onWarnContainer = Color(0xFFFFD866);
+/// theme's own container pair; off target is an amber pair (about 8:1 in
+/// either brightness), since the theme has no warning role. Direction is also
+/// carried by an arrow and a sign, never by colour alone.
+(Color, Color) _warnPair(Brightness b) => b == Brightness.dark
+    ? (const Color(0xFF4A3B00), const Color(0xFFFFD866))
+    : (const Color(0xFFFFE9A8), const Color(0xFF3D2F00));
+
+/// Background and foreground for a target status.
+(Color, Color) _statusColors(ColorScheme s, TargetStatus st) => switch (st) {
+      TargetStatus.onTarget => (s.primaryContainer, s.onPrimaryContainer),
+      _ => _warnPair(s.brightness),
+    };
 
 /// A power reading with the ERG target and how far off it is.
 class _PowerTile extends ConsumerWidget {
@@ -121,9 +129,16 @@ class _PowerTile extends ConsumerWidget {
     final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
     final simulating = ref.watch(trainerControllerProvider.select((s) => s.simulating));
     final theme = Theme.of(context);
+    // The whole tile takes the status colour, so it reads from across the
+    // room; the delta text and arrow still say it without colour.
+    final colors = power == null || simulating
+        ? null
+        : _statusColors(theme.colorScheme, targetStatus(power, target));
+    final fg = colors?.$2;
 
     return Card(
       margin: EdgeInsets.zero,
+      color: colors?.$1,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: LayoutBuilder(builder: (context, box) {
@@ -132,14 +147,15 @@ class _PowerTile extends ConsumerWidget {
           final roomy = box.maxHeight >= 120;
           final chip = power == null || simulating
               ? null
-              : TargetChip(power: power, target: target);
+              : TargetChip(
+                  power: power, target: target, large: roomy, bare: true);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
                 Flexible(
                   child: Text(label,
-                      style: theme.textTheme.bodyMedium,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: fg),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ),
@@ -154,17 +170,12 @@ class _PowerTile extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(
-                        _whole(power),
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.w600,
-                          height: 1.0,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
+                      Text(_whole(power),
+                          style: metricNumberStyle.copyWith(color: fg)),
                       const SizedBox(width: 6),
-                      Text('W', style: theme.textTheme.titleMedium),
+                      Text('W',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(color: fg)),
                     ],
                   ),
                 ),
@@ -174,7 +185,7 @@ class _PowerTile extends ConsumerWidget {
                 Row(children: [
                   Text('Target $target W',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
+                          color: fg ?? theme.colorScheme.onSurfaceVariant)),
                   const Spacer(),
                   if (chip != null) chip,
                 ]),
@@ -190,65 +201,70 @@ class _PowerTile extends ConsumerWidget {
 /// How measured power compares with the ERG target: a pill with an icon, a
 /// signed delta and a colour, so no state relies on colour alone.
 class TargetChip extends StatelessWidget {
-  const TargetChip({required this.power, required this.target});
+  const TargetChip(
+      {required this.power,
+      required this.target,
+      this.large = false,
+      this.bare = false});
 
   final double power;
   final int target;
+
+  /// Readable from arm's length: used where the tile has room.
+  final bool large;
+
+  /// No pill: for a surface that already carries the status colour.
+  final bool bare;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final status = targetStatus(power, target);
     final delta = targetDelta(power, target);
+    final (bg, fg) = _statusColors(scheme, status);
 
-    final (Color bg, Color fg, IconData icon, String text, String spoken) =
-        switch (status) {
-      TargetStatus.onTarget => (
-          scheme.primaryContainer,
-          scheme.onPrimaryContainer,
-          Icons.check,
-          'On target',
-          'On target',
-        ),
+    final (IconData icon, String text, String spoken) = switch (status) {
+      TargetStatus.onTarget => (Icons.check, 'On target', 'On target'),
       TargetStatus.above => (
-          _warnContainer,
-          _onWarnContainer,
           Icons.arrow_upward,
           '+$delta W',
           '$delta watts above target',
         ),
       TargetStatus.below => (
-          _warnContainer,
-          _onWarnContainer,
           Icons.arrow_downward,
           '−${delta.abs()} W',
           '${delta.abs()} watts below target',
         ),
     };
 
+    final content = Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: large ? 24 : 16, color: fg),
+      SizedBox(width: large ? 6 : 4),
+      Text(text,
+          style: TextStyle(
+            color: fg,
+            fontSize: large ? 22 : 14,
+            fontWeight: FontWeight.w600,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          )),
+    ]);
+
     return Semantics(
       label: spoken,
       child: ExcludeSemantics(
-        child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, size: 16, color: fg),
-            const SizedBox(width: 4),
-            Text(text,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                )),
-          ]),
-        ),
-      ),
+        child: bare
+            ? content
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: large ? 14 : 10, vertical: large ? 8 : 4),
+                  child: content,
+                ),
+              ),
       ),
     );
   }
@@ -286,6 +302,8 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
           message: why ??
               (delta > 0 ? 'Raise target by $delta W' : 'Lower target by ${-delta} W'),
           child: IconButton.filledTonal(
+            style: IconButton.styleFrom(
+                minimumSize: Size.square(isTouchUi(context) ? 56 : 40)),
             icon: Icon(delta > 0 ? Icons.add : Icons.remove),
             onPressed: following ? null : () => c.adjustTarget(delta),
           ),
@@ -304,8 +322,8 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
                     'cadence.\nArrow up/down: ±5 W. Shift + arrow: ±25 W.',
                 child: Text(
                     switch (lock) {
-                      TargetLock.plan => 'ERG target · plan',
-                      TargetLock.simulation => 'Simulation · grade',
+                      TargetLock.plan => 'Target set by plan',
+                      TargetLock.simulation => 'Grade set by route',
                       null => 'ERG target',
                     },
                     maxLines: 1,
@@ -325,14 +343,17 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
               ),
               Tooltip(
                 message: 'Change the step size',
-                child: InkWell(
-                  onTap: following
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: following
                       ? null
                       : () => setState(() =>
                           _step = _steps[(_steps.indexOf(_step) + 1) % _steps.length]),
-                  child: Text('±$_step W',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(decoration: TextDecoration.underline)),
+                  child: Text('±$_step W'),
                 ),
               ),
             ]),

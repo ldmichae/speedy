@@ -14,7 +14,9 @@ class IndoorCyclingApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Indoor Cycling',
       debugShowCheckedModeBanner: false,
-      theme: ref.watch(paletteProvider).theme,
+      theme: ref.watch(paletteProvider).lightTheme,
+      darkTheme: ref.watch(paletteProvider).theme,
+      themeMode: ref.watch(themeModeProvider),
       home: const HomeScreen(),
     );
   }

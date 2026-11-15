@@ -69,19 +69,42 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     await ref.read(trainerControllerProvider.notifier).disconnect();
   }
 
-  /// The trainer, the view choice, Edit layout (dashboard only) and
-  /// Disconnect, behind one button on the record bar.
+  /// Dashboard, Map or Chart, always visible: it is the main mode switch.
+  Widget _viewSwitch(RideView view) => SegmentedButton<RideView>(
+        showSelectedIcon: false,
+        style: isTouchUi(context)
+            ? null
+            : const ButtonStyle(visualDensity: VisualDensity.compact),
+        segments: [
+          for (final v in RideView.values)
+            ButtonSegment(
+                value: v,
+                label: Text(v.label),
+                icon: Icon(switch (v) {
+                  RideView.dashboard => Icons.dashboard_outlined,
+                  RideView.map => Icons.map_outlined,
+                  RideView.chart => Icons.show_chart,
+                })),
+        ],
+        selected: {view},
+        onSelectionChanged: (s) {
+          setState(() => _editing = false); // only the dashboard is editable
+          ref.read(rideViewProvider.notifier).set(s.first);
+        },
+      );
+
+  /// The trainer, Edit layout (dashboard only) and Disconnect, behind one
+  /// button on the record bar.
   Widget _viewMenu(String? deviceName, RideView view) => PopupMenuButton<Object>(
         tooltip: 'View and trainer',
-        // Narrower than the default 48 px, to fit a phone-width record bar.
-        style: IconButton.styleFrom(
-            minimumSize: const Size(36, 36), padding: EdgeInsets.zero),
+        // Narrower than the default 48 px on desktop, to fit the record bar.
+        style: isTouchUi(context)
+            ? null
+            : IconButton.styleFrom(
+                minimumSize: const Size(36, 36), padding: EdgeInsets.zero),
         icon: const Icon(Icons.more_vert),
         onSelected: (v) {
-          if (v is RideView) {
-            _editing = false; // only the dashboard is editable
-            ref.read(rideViewProvider.notifier).set(v);
-          } else if (v == 'edit') {
+          if (v == 'edit') {
             setState(() => _editing = true);
           } else {
             _disconnect();
@@ -96,9 +119,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                 Flexible(child: Text(deviceName ?? 'Trainer')),
               ])),
           const PopupMenuDivider(),
-          for (final v in RideView.values)
-            CheckedPopupMenuItem(
-                value: v, checked: v == view, child: Text(v.label)),
           if (view == RideView.dashboard && !_editing)
             const PopupMenuItem(
                 value: 'edit',
@@ -137,11 +157,30 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ),
           child: child,
         );
-    final errorText = error == null
+    // At the top, where a mid-ride fault is seen, not below the tiles.
+    final errorBanner = error == null
         ? null
-        : Text(error, style: TextStyle(color: theme.colorScheme.error));
+        : Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            color: theme.colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(children: [
+                Icon(Icons.error_outline,
+                    color: theme.colorScheme.onErrorContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Text(error,
+                        style: TextStyle(
+                            color: theme.colorScheme.onErrorContainer))),
+              ]),
+            ),
+          );
 
     final header = [
+      if (errorBanner != null) errorBanner,
+      _viewSwitch(view),
+      const SizedBox(height: 12),
       const PlanBar(),
       WorkoutBar(trailing: _viewMenu(deviceName, view)),
       const SizedBox(height: 12),
@@ -164,14 +203,13 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
               ...header,
               DashboardGrid(editing: _editing, compact: compact),
             ])),
-            if (errorText != null) ...[const SizedBox(height: 12), errorText],
           ],
         );
       } else {
         // Map or chart over fixed metrics, sized to the window so the page
         // does not scroll. Below a minimum height it scrolls rather than
         // squashing the map.
-        final minHeight = 330 + MetricStrip.heightFor(compact);
+        final minHeight = 400 + MetricStrip.heightFor(compact);
         content = SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: SizedBox(
@@ -190,7 +228,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                       MetricStrip(compact: compact),
                     ])),
               ),
-              if (errorText != null) ...[const SizedBox(height: 12), errorText],
             ]),
           ),
         );

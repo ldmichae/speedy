@@ -20,12 +20,51 @@ enum AppPalette {
   final String label;
   final Color seed;
 
-  ThemeData get theme => ThemeData(
+  ThemeData get theme => _theme(Brightness.dark);
+  ThemeData get lightTheme => _theme(Brightness.light);
+
+  ThemeData _theme(Brightness b) => ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: seed,
-          brightness: Brightness.dark,
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: b),
+      );
+}
+
+/// Dark by default (the look so far); System or Light for a bright room.
+final themeModeProvider =
+    NotifierProvider<ThemeModeController, ThemeMode>(ThemeModeController.new);
+
+class ThemeModeController extends PersistedNotifier<ThemeMode> {
+  @override
+  ThemeMode get defaults => ThemeMode.dark;
+
+  @override
+  ThemeMode? read(SharedPreferences p) {
+    final name = p.getString('themeMode');
+    return ThemeMode.values.where((x) => x.name == name).firstOrNull;
+  }
+
+  @override
+  Future<void> write(SharedPreferences p, ThemeMode v) =>
+      p.setString('themeMode', v.name);
+
+  void set(ThemeMode m) => put(m);
+}
+
+class ThemeModeChooser extends ConsumerWidget {
+  const ThemeModeChooser({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      SegmentedButton<ThemeMode>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+          ButtonSegment(value: ThemeMode.system, label: Text('System')),
+        ],
+        selected: {ref.watch(themeModeProvider)},
+        onSelectionChanged: (s) =>
+            ref.read(themeModeProvider.notifier).set(s.first),
       );
 }
 

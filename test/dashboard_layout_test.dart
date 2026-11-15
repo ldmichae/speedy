@@ -113,9 +113,9 @@ void main() {
       expect(at(left[TileKind.ergTarget]!), (power.row + power.rows, 0));
     });
 
-    test('elapsed time is not duplicated: the Record bar owns it', () {
-      expect(allKinds(standard), isNot(contains(TileKind.time)));
-      expect(standard.unplaced, [TileKind.powerNow, TileKind.time, TileKind.route]);
+    test('elapsed time is a tile, not part of the Record bar', () {
+      expect(allKinds(standard), contains(TileKind.time));
+      expect(standard.unplaced, [TileKind.powerNow, TileKind.route]);
     });
 
     test('before recording: only the left side has anything to show', () {
@@ -123,9 +123,10 @@ void main() {
       final left = place(standard, Side.left, show: notRideOnly);
       expect(at(left[TileKind.powerAvg]!), (0, 0));
       expect(at(left[TileKind.ergTarget]!), (2, 0));
-      expect(at(left[TileKind.cadence]!), (3, 0));
-      expect(at(left[TileKind.speed]!), (3, 1));
-      expect(at(left[TileKind.heartRate]!), (3, 2));
+      expect(at(left[TileKind.cadence]!), (2, 2));
+      expect(at(left[TileKind.speed]!), (3, 0));
+      expect(at(left[TileKind.heartRate]!), (3, 1));
+      expect(at(left[TileKind.time]!), (3, 2));
       expectNoOverlap(left.values);
 
       // Everything on the right waits for a ride.
@@ -191,17 +192,17 @@ void main() {
     });
 
     test('dropping on another tile takes its slot and shoves it on', () {
-      // Heart rate dropped on cadence's slot (row 3, col 0).
-      final order = dropOnLeft(TileKind.heartRate, 3, 0);
+      // Heart rate dropped on cadence's slot (row 2, col 2).
+      final order = dropOnLeft(TileKind.heartRate, 2, 2);
       expect(order.indexOf(TileKind.heartRate), lessThan(order.indexOf(TileKind.cadence)));
       final p = place(
           DashboardLayout(left: [
             for (final k in order) tile(standard, k)
           ], right: const []),
           Side.left);
-      expect(at(p[TileKind.heartRate]!), (3, 0));
-      expect(at(p[TileKind.cadence]!), (3, 1));
-      expect(at(p[TileKind.speed]!), (3, 2));
+      expect(at(p[TileKind.heartRate]!), (2, 2));
+      expect(at(p[TileKind.cadence]!), (3, 0));
+      expect(at(p[TileKind.speed]!), (3, 1));
     });
 
     test('a big tile dropped on small ones pushes them out of its way', () {
@@ -280,7 +281,7 @@ void main() {
       // Later: the index counts the tiles without the one being moved.
       l = standard.moveTo(TileKind.cadence, Side.left, 3);
       expect(kinds(l.left),
-          [TileKind.powerAvg, TileKind.ergTarget, TileKind.speed, TileKind.cadence, TileKind.heartRate]);
+          [TileKind.powerAvg, TileKind.ergTarget, TileKind.speed, TileKind.cadence, TileKind.heartRate, TileKind.time]);
     });
 
     test('moveTo the other side takes it off the first', () {
@@ -372,13 +373,13 @@ void main() {
       final l = standard.showInstead(TileKind.cadence, TileKind.powerNow);
       expect(allKinds(l), contains(TileKind.powerNow));
       expect(allKinds(l), isNot(contains(TileKind.cadence)));
-      expect(l.unplaced, [TileKind.cadence, TileKind.time, TileKind.route]);
+      expect(l.unplaced, [TileKind.cadence, TileKind.route]);
     });
 
     test('remove and add', () {
       var l = standard.remove(TileKind.speed);
       expect(allKinds(l), isNot(contains(TileKind.speed)));
-      expect(l.unplaced, [TileKind.powerNow, TileKind.speed, TileKind.time, TileKind.route]);
+      expect(l.unplaced, [TileKind.powerNow, TileKind.speed, TileKind.route]);
 
       l = l.add(TileKind.speed);
       expect(l.sideOf(TileKind.speed), isNotNull);
