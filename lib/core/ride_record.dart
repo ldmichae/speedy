@@ -26,10 +26,10 @@ class RideRecord {
         'v': _version,
         'startedAt': startedAt.toIso8601String(),
         'kcal': kcal,
-        // [t, target, power, smoothed, cadence, speed, hr] per sample
+        // [t, target, power, smoothed, cadence, speed, hr, grade] per sample
         'samples': [
           for (final s in samples)
-            [s.t, s.target, s.power, s.smoothedPower, s.cadence, s.speed, s.heartRate]
+            [s.t, s.target, s.power, s.smoothedPower, s.cadence, s.speed, s.heartRate, s.grade]
         ],
       };
 
@@ -49,6 +49,8 @@ class RideRecord {
             cadence: (r[4] as num?)?.toDouble(),
             speed: (r[5] as num?)?.toDouble(),
             heartRate: (r[6] as num?)?.toInt(),
+            // Rides saved before elevation was recorded have 7 columns.
+            grade: r.length > 7 ? (r[7] as num?)?.toDouble() : null,
           ),
       ],
     );

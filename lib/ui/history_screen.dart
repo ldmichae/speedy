@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/ride_record.dart';
 import '../core/power_fun.dart';
+import 'fitness_summary.dart';
 import 'format.dart';
 import 'layout.dart';
 import 'power_fun.dart';
@@ -26,9 +27,7 @@ class HistoryScreen extends ConsumerWidget {
               child: rides.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Could not load rides: $e')),
-                data: (list) => Column(children: [
-                  if (list.isNotEmpty) _LifetimePower(rides: list),
-                  Expanded(child: list.isEmpty
+                data: (list) => list.isEmpty
                     ? const Center(
                         child: Padding(
                           padding: EdgeInsets.all(24),
@@ -38,30 +37,34 @@ class HistoryScreen extends ConsumerWidget {
                           ),
                         ),
                       )
-                    : wide
-                        // shortcut: builds every card up front; switch to a
-                        // lazy grid if histories reach hundreds of rides.
-                        ? SingleChildScrollView(
-                            padding: const EdgeInsets.all(16),
-                            child: LayoutBuilder(builder: (context, inner) {
-                              final cardWidth = (inner.maxWidth - 12) / 2;
+                    // shortcut: builds every card up front; switch to a
+                    // lazy list if histories reach hundreds of rides.
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _LifetimePower(rides: list),
+                            const SizedBox(height: 12),
+                            const FitnessSummary(),
+                            const SizedBox(height: 12),
+                            LayoutBuilder(builder: (context, inner) {
+                              final cardWidth =
+                                  wide ? (inner.maxWidth - 12) / 2 : inner.maxWidth;
                               return Wrap(
                                 spacing: 12,
                                 runSpacing: 12,
                                 children: [
                                   for (final r in list)
-                                    SizedBox(width: cardWidth, child: _RideCard(ride: r)),
+                                    SizedBox(
+                                        width: cardWidth,
+                                        child: _RideCard(ride: r)),
                                 ],
                               );
                             }),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: list.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
-                            itemBuilder: (_, i) => _RideCard(ride: list[i]),
-                          )),
-                ]),
+                          ],
+                        ),
+                      ),
               ),
             ),
           );
@@ -236,17 +239,11 @@ class _LifetimePower extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final joules = rides.fold(0.0, (a, r) => a + rideJoules(r.samples));
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: SizedBox(
-        width: double.infinity,
-        child: Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: PowerFun(joules: joules, title: 'All your rides'),
-          ),
-        ),
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: PowerFun(joules: joules, title: 'All your rides'),
       ),
     );
   }

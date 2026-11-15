@@ -11,6 +11,7 @@ class RideSample {
     this.cadence,
     this.speed,
     this.heartRate,
+    this.grade,
   });
 
   /// Seconds since the ride started, excluding pauses.
@@ -21,6 +22,9 @@ class RideSample {
   final double? cadence;
   final double? speed;
   final int? heartRate;
+
+  /// Road grade in percent while simulating a route; null in ERG or free ride.
+  final double? grade;
 }
 
 enum RecStatus { idle, recording, paused }
@@ -75,6 +79,7 @@ class Recording {
       cadence: d?.cadenceRpm,
       speed: d?.speedKph,
       heartRate: d?.heartRate,
+      grade: input.grade,
     ));
   }
 
@@ -88,9 +93,13 @@ class Recording {
 
 /// What the trainer says at one instant.
 class SampleInput {
-  const SampleInput({this.target, this.data, this.smoothedPower});
+  const SampleInput(
+      {this.target, this.data, this.smoothedPower, this.grade});
   /// The ERG target; null while the trainer simulates a grade.
   final int? target;
   final BikeData? data;
   final double? smoothedPower;
+
+  /// Road grade (percent) while the trainer simulates a route.
+  final double? grade;
 }

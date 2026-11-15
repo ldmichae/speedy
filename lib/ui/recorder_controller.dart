@@ -103,7 +103,8 @@ class RecorderController extends Notifier<RecordingState> {
     return SampleInput(
         target: s.simulating ? null : s.targetWatts,
         data: s.latest,
-        smoothedPower: s.smoothedPower);
+        smoothedPower: s.smoothedPower,
+        grade: s.gradePercent);
   }
 
   void start() {

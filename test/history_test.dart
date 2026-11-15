@@ -470,7 +470,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('0.7 mi'), findsOneWidget); // 1.2 km
+      // 1.2 km: on the ride card and in the last-30-days total
+      expect(find.text('0.7 mi'), findsNWidgets(2));
       expect(find.text('1.2 km'), findsNothing);
       final stored = RideRecord.fromJson(
           jsonDecode(store.rides.values.single) as Map<String, Object?>);

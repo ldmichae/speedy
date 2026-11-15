@@ -9,6 +9,7 @@ class RideStats {
     required this.distanceMeters,
     required this.avgPower,
     required this.kcal,
+    this.elevationGainMeters = 0,
   });
 
   /// Moving time (paused time excluded).
@@ -19,6 +20,9 @@ class RideStats {
   /// Null when no complete rider profile was available.
   final double? kcal;
 
+  /// Climbing from the simulated grade; 0 for ERG and free rides.
+  final double elevationGainMeters;
+
   double get distanceKm => distanceMeters / 1000;
 
   /// [kcal] is passed in because it depends on the profile at the time.
@@ -26,6 +30,7 @@ class RideStats {
     var meters = 0.0;
     var powerSum = 0;
     var powerCount = 0;
+    var gain = 0.0;
     for (var i = 0; i < samples.length; i++) {
       final s = samples[i];
       if (s.power != null) {
@@ -33,7 +38,9 @@ class RideStats {
         powerCount++;
       }
       if (i > 0 && s.speed != null) {
-        meters += s.speed! / 3.6 * (s.t - samples[i - 1].t);
+        final step = s.speed! / 3.6 * (s.t - samples[i - 1].t);
+        meters += step;
+        if ((s.grade ?? 0) > 0) gain += step * s.grade! / 100;
       }
     }
     return RideStats(
@@ -42,6 +49,7 @@ class RideStats {
       distanceMeters: meters,
       avgPower: powerCount == 0 ? null : powerSum / powerCount,
       kcal: kcal,
+      elevationGainMeters: gain,
     );
   }
 }
