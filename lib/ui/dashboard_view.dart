@@ -12,12 +12,11 @@ import 'dashboard_layout_controller.dart';
 import 'focus_views.dart';
 import 'layout.dart';
 import 'ride_view_controller.dart';
-import 'navigation.dart';
 import 'plan_screen.dart';
 import 'recorder_controller.dart';
 import 'recording_panel.dart';
 import 'trainer_controller.dart';
-import 'ride_session.dart';
+import 'ride_commands.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
@@ -45,21 +44,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     _focus.dispose();
     WakelockPlus.disable().catchError((_) {});
     super.dispose();
-  }
-
-  /// Keys act only while this screen is on top: not under a dialog or a
-  /// pushed screen, and not while another page is open in the dock (the
-  /// dashboard stays alive behind it).
-  VoidCallback _guarded(VoidCallback f) => () {
-        final onTop = ModalRoute.of(context)?.isCurrent ?? true;
-        if (onTop && ref.read(pageProvider) == AppPage.ride) f();
-      };
-
-  /// A plan owns the target while it runs.
-  void _nudge(int watts) {
-    if (ref.read(targetLockProvider) == null) {
-      ref.read(trainerControllerProvider.notifier).adjustTarget(watts);
-    }
   }
 
   /// Disconnecting mid-ride pauses the recording, so it asks first.
@@ -217,17 +201,8 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       return CallbackShortcuts(
         bindings: _editing
             ? const {}
-            : {
-                const SingleActivator(LogicalKeyboardKey.space): _guarded(ref.read(recorderProvider.notifier).toggle),
-                const SingleActivator(LogicalKeyboardKey.arrowUp): _guarded(() =>
-                    _nudge(5)),
-                const SingleActivator(LogicalKeyboardKey.arrowDown): _guarded(() =>
-                    _nudge(-5)),
-                const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): _guarded(() =>
-                    _nudge(25)),
-                const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): _guarded(() =>
-                    _nudge(-25)),
-              },
+            : rideShortcuts(ref.read(rideCommandsProvider),
+                () => ModalRoute.of(context)?.isCurrent ?? true),
         child: Focus(
           focusNode: _focus,
           autofocus: true,
