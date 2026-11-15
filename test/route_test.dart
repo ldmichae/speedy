@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +13,8 @@ import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fakes/in_memory_json_store.dart';
 
 // ~111 m per 0.001 degree of latitude.
 final route = SavedRoute('R', const [LatLng(0, 0), LatLng(0.002, 0)],
@@ -118,15 +122,35 @@ void main() {
 
   test('routes persist', () async {
     SharedPreferences.setMockInitialValues({});
-    final c = ProviderContainer();
-    addTearDown(c.dispose);
-    c.read(routesProvider.notifier).add(route);
+    final store = InMemoryJsonStore();
+    ProviderContainer open() {
+      final c = ProviderContainer(
+          overrides: [routesStoreProvider.overrideWithValue(store)]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    open().read(routesProvider.notifier).add(route);
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    final c2 = ProviderContainer();
-    addTearDown(c2.dispose);
+    final c2 = open();
     c2.read(routesProvider);
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(c2.read(routesProvider).single.name, 'R');
+  });
+
+  test('routes saved in preferences move to the store once', () async {
+    SharedPreferences.setMockInitialValues(
+        {'routes': jsonEncode([route.toJson()])});
+    final store = InMemoryJsonStore();
+    final c = ProviderContainer(
+        overrides: [routesStoreProvider.overrideWithValue(store)]);
+    addTearDown(c.dispose);
+    c.read(routesProvider);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(c.read(routesProvider).single.name, 'R');
+    expect(store.rides, hasLength(1));
+    expect((await SharedPreferences.getInstance()).getString('routes'), isNull);
   });
 
   test('riding starts recording, begins at the start, ends with the ride', () {

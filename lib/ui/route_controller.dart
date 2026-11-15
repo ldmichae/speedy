@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+
+import '../core/json_store.dart';
 import '../core/prefs.dart';
 import '../core/route.dart';
 import '../core/route_service.dart';
@@ -13,38 +15,75 @@ import 'ride_session.dart';
 /// Overridable so tests never touch the network.
 final routeSnapperProvider = Provider<RouteSnapper>((ref) => OsrmSnapper());
 
+/// Overridable so tests do not touch the filesystem.
+final routesStoreProvider =
+    Provider<JsonStore>((ref) => createJsonStore('routes'));
+
 final routesProvider =
     NotifierProvider<RoutesController, List<SavedRoute>>(RoutesController.new);
 
-class RoutesController extends PersistedNotifier<List<SavedRoute>> {
-  static const _key = 'routes';
+/// The saved routes, kept as one document so edits and deletes can go by
+/// identity. Routes used to live in shared preferences; the first load moves
+/// them over.
+class RoutesController extends Notifier<List<SavedRoute>> {
+  static const _doc = 'all';
+  static const _legacyKey = 'routes';
+
+  bool _touched = false;
+  bool _disposed = false;
 
   @override
-  List<SavedRoute> get defaults => const [];
+  List<SavedRoute> build() {
+    ref.onDispose(() => _disposed = true);
+    _load();
+    return const [];
+  }
 
-  @override
-  List<SavedRoute>? read(SharedPreferences p) {
+  static List<SavedRoute>? _decode(String raw) {
     try {
-      final raw = p.getString(_key);
-      if (raw == null) return null;
       return [
         for (final j in jsonDecode(raw) as List) SavedRoute.fromJson(j),
       ].whereType<SavedRoute>().toList();
     } catch (_) {
-      return null;
+      return null; // unreadable: start empty rather than crash
     }
   }
 
-  @override
-  Future<void> write(SharedPreferences p, List<SavedRoute> v) =>
-      p.setString(_key, jsonEncode([for (final r in v) r.toJson()]));
+  /// A [put] made before this finishes wins over what is stored.
+  Future<void> _load() async {
+    try {
+      final docs = await ref.read(routesStoreProvider).loadAll();
+      if (docs.isNotEmpty) {
+        final stored = _decode(docs.first);
+        if (stored != null && !_touched && !_disposed) state = stored;
+        return;
+      }
+      final p = await prefs();
+      final raw = p?.getString(_legacyKey);
+      final legacy = raw == null ? null : _decode(raw);
+      if (p == null || legacy == null || _disposed) return;
+      state = [...legacy, ...state];
+      await _save();
+      await p.remove(_legacyKey); // only once the new copy is written
+    } catch (_) {} // storage is a convenience, never fatal
+  }
 
-  void add(SavedRoute r) => put([...state, r]);
+  Future<void> _save() => ref
+      .read(routesStoreProvider)
+      .save(_doc, jsonEncode([for (final r in state) r.toJson()]));
 
-  void delete(SavedRoute r) => put([...state]..remove(r));
+  void _put(List<SavedRoute> v) {
+    _touched = true;
+    state = v;
+    _save().catchError((_) {});
+  }
+
+  void add(SavedRoute r) => _put([...state, r]);
+
+  void delete(SavedRoute r) => _put([...state]..remove(r));
 
   void replace(SavedRoute old, SavedRoute r) =>
-      put([for (final x in state) identical(x, old) ? r : x]);
+      _put([for (final x in state) identical(x, old) ? r : x]);
 }
 
 /// Where the rider is on the course being ridden.
