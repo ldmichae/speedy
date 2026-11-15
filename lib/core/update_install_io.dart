@@ -34,9 +34,12 @@ Future<void> installUpdate(AppUpdate update) async {
   await ps1.writeAsString(_script);
 
   final exe = Platform.resolvedExecutable;
+  // A directly detached powershell is killed by exit(0) before it runs;
+  // `cmd /c start` hands it to a process that outlives us.
   await Process.start(
-    'powershell',
+    'cmd',
     [
+      '/c', 'start', '', '/b', 'powershell',
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
       '-File', ps1.path,
       '$pid', zip.path, File(exe).parent.path, exe,
