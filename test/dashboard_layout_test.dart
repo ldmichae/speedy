@@ -96,8 +96,8 @@ void main() {
     });
 
     test('usedRows is the bottom of the lowest tile', () {
-      expect(usedRows(standard.left), 5); // power 2 + ERG 2 + small row 1
-      expect(usedRows(standard.right), 5); // chart 4 + totals row 1
+      expect(usedRows(standard.left), 4); // power 2 + ERG 1 + small row 1
+      expect(usedRows(standard.right), 4); // chart 3 + totals row 1
     });
   });
 
@@ -123,9 +123,9 @@ void main() {
       final left = place(standard, Side.left, show: notRideOnly);
       expect(at(left[TileKind.powerAvg]!), (0, 0));
       expect(at(left[TileKind.ergTarget]!), (2, 0));
-      expect(at(left[TileKind.cadence]!), (4, 0));
-      expect(at(left[TileKind.speed]!), (4, 1));
-      expect(at(left[TileKind.heartRate]!), (4, 2));
+      expect(at(left[TileKind.cadence]!), (3, 0));
+      expect(at(left[TileKind.speed]!), (3, 1));
+      expect(at(left[TileKind.heartRate]!), (3, 2));
       expectNoOverlap(left.values);
 
       // Everything on the right waits for a ride.
@@ -135,9 +135,9 @@ void main() {
     test('while recording: chart on the right over three totals', () {
       final right = place(standard, Side.right);
       expect(at(right[TileKind.chart]!), (0, 0));
-      expect(at(right[TileKind.distance]!), (4, 0));
-      expect(at(right[TileKind.avgPower]!), (4, 1));
-      expect(at(right[TileKind.energy]!), (4, 2));
+      expect(at(right[TileKind.distance]!), (3, 0));
+      expect(at(right[TileKind.avgPower]!), (3, 1));
+      expect(at(right[TileKind.energy]!), (3, 2));
       expectNoOverlap(right.values);
       expectNoOverlap(place(standard, Side.left).values);
     });
@@ -191,17 +191,17 @@ void main() {
     });
 
     test('dropping on another tile takes its slot and shoves it on', () {
-      // Heart rate dropped on cadence's slot (row 4, col 0).
-      final order = dropOnLeft(TileKind.heartRate, 4, 0);
+      // Heart rate dropped on cadence's slot (row 3, col 0).
+      final order = dropOnLeft(TileKind.heartRate, 3, 0);
       expect(order.indexOf(TileKind.heartRate), lessThan(order.indexOf(TileKind.cadence)));
       final p = place(
           DashboardLayout(left: [
             for (final k in order) tile(standard, k)
           ], right: const []),
           Side.left);
-      expect(at(p[TileKind.heartRate]!), (4, 0));
-      expect(at(p[TileKind.cadence]!), (4, 1));
-      expect(at(p[TileKind.speed]!), (4, 2));
+      expect(at(p[TileKind.heartRate]!), (3, 0));
+      expect(at(p[TileKind.cadence]!), (3, 1));
+      expect(at(p[TileKind.speed]!), (3, 2));
     });
 
     test('a big tile dropped on small ones pushes them out of its way', () {
@@ -230,10 +230,10 @@ void main() {
         return at(p[kind]!);
       }
 
-      // The last row is row 4 (the three small tiles). A drop beneath it picks
+      // The last row is row 3 (the three small tiles). A drop beneath it picks
       // the slot in that row nearest the column, never a gap earlier on.
-      expect(landing(TileKind.cadence, 40, 0), (4, 0));
-      expect(landing(TileKind.cadence, 40, 2), (4, 2));
+      expect(landing(TileKind.cadence, 40, 0), (3, 0));
+      expect(landing(TileKind.cadence, 40, 2), (3, 2));
       expect(dropOnLeft(TileKind.cadence, 40, 2).last, TileKind.cadence);
     });
 
@@ -243,7 +243,7 @@ void main() {
       final i = insertionIndexFor(others, tile(standard, TileKind.cadence), 0, 40);
       expect(i, others.length); // last
       final moved = standard.moveTo(TileKind.cadence, Side.right, i);
-      expect(at(place(moved, Side.right)[TileKind.cadence]!), (5, 0));
+      expect(at(place(moved, Side.right)[TileKind.cadence]!), (4, 0));
     });
 
     test('dropping on an empty side just puts it there', () {
@@ -294,7 +294,7 @@ void main() {
     test('moving keeps the tile\'s size', () {
       final l = standard.moveTo(TileKind.chart, Side.left, 0);
       expect(kinds(l.left).first, TileKind.chart);
-      expect((tile(l, TileKind.chart).span, tile(l, TileKind.chart).rows), (3, 4));
+      expect((tile(l, TileKind.chart).span, tile(l, TileKind.chart).rows), (3, 3));
     });
 
     test('moveTo the ends, and out-of-range indexes are clamped', () {
@@ -357,8 +357,8 @@ void main() {
       expect(l.right[0].kind, TileKind.cadence);
       // The chart needs at least 2/3 wide and 3 rows, so the small slot grows.
       expect((l.left[2].span, l.left[2].rows), (2, 3));
-      // Cadence now sits in the chart's full-width, 4-row slot.
-      expect((l.right[0].span, l.right[0].rows), (3, 4));
+      // Cadence now sits in the chart's full-width, 3-row slot.
+      expect((l.right[0].span, l.right[0].rows), (3, 3));
     });
 
     test('swapped tiles keep their own sizes', () {

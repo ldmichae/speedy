@@ -242,34 +242,35 @@ void main() {
         (tester) async {
       await openDashboard(tester);
 
-      await tester.tap(find.text('+25'));
+      await tester.tap(find.byTooltip('Raise target by 5 W'));
       await tester.pump();
 
-      expect(find.text('Target 125 W'), findsOneWidget);
+      expect(find.text('Target 105 W'), findsOneWidget);
       expect(find.text('Target 100 W'), findsNothing);
     });
 
-    testWidgets('the ERG tile is controls: big equal buttons and the value being set',
+    testWidgets('the ERG tile is one slim stepper; tapping the step size cycles it',
         (tester) async {
       final c = await openDashboard(tester);
 
-      for (final label in ['−25', '−10', '−5', '+5', '+10', '+25']) {
-        final size = tester.getSize(find.widgetWithText(FilledButton, label));
-        expect(size.height, greaterThanOrEqualTo(56), reason: label);
-      }
-      final widths = {
-        for (final label in ['−25', '−10', '−5', '+5', '+10', '+25'])
-          tester.getSize(find.widgetWithText(FilledButton, label)).width.round()
-      };
-      expect(widths, hasLength(1)); // equal width
+      expect(tester.getSize(tile(TileKind.ergTarget)).height, lessThan(110));
       expect(find.descendant(of: tile(TileKind.ergTarget), matching: find.text('100 W')),
           findsOneWidget);
 
-      await tester.tap(find.text('−10'));
+      await tester.tap(find.text('±5 W'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Lower target by 10 W'));
       await tester.pump();
       expect(targetOf(c), 90);
       expect(find.descendant(of: tile(TileKind.ergTarget), matching: find.text('90 W')),
           findsOneWidget);
+
+      await tester.tap(find.text('±10 W'));
+      await tester.pump();
+      expect(find.text('±25 W'), findsOneWidget);
+      await tester.tap(find.byTooltip('Raise target by 25 W'));
+      await tester.pump();
+      expect(targetOf(c), 115);
     });
 
     testWidgets('on phone width the controls are on the first screen under power',
@@ -285,9 +286,9 @@ void main() {
 
     testWidgets('the ERG buttons still change the target', (tester) async {
       final c = await openDashboard(tester);
-      await tester.tap(find.text('+25'));
+      await tester.tap(find.byTooltip('Raise target by 5 W'));
       await tester.pump();
-      expect(targetOf(c), 125);
+      expect(targetOf(c), 105);
     });
   });
 
@@ -383,7 +384,7 @@ void main() {
         (tester) async {
       final c = await openDashboard(tester);
 
-      await tester.tap(find.text('+5'));
+      await tester.tap(find.byTooltip('Raise target by 5 W'));
       await tester.pumpAndSettle();
       expect(targetOf(c), 105);
 
@@ -668,7 +669,7 @@ void main() {
       final c = await openDashboard(tester);
       await startEditing(tester);
 
-      await tester.tap(find.text('+25'), warnIfMissed: false);
+      await tester.tap(find.byTooltip('Raise target by 5 W'), warnIfMissed: false);
       await tester.pump();
 
       expect(targetOf(c), 100);
@@ -704,7 +705,7 @@ void main() {
 
       ChoiceChip chip(String label) =>
           tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label));
-      expect(chip('1 row').onSelected, isNull); // disabled
+      expect(chip('1 row').onSelected, isNotNull); // one row is enough
       expect(chip('2 rows').onSelected, isNotNull);
       expect(chip('1/3').onSelected, isNull); // needs at least 2/3
       expect(chip('2/3').onSelected, isNotNull);

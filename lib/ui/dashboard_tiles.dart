@@ -255,15 +255,21 @@ class TargetChip extends StatelessWidget {
   }
 }
 
-/// The ERG controls. The target itself is shown on the power tile; here it
-/// is repeated only as the value being changed.
-class _ErgTile extends ConsumerWidget {
+/// The ERG controls: a stepper around the target, − and + by the chosen step
+/// (5, 10 or 25 W; the arrow keys do 5 and Shift 25). One row high.
+class _ErgTile extends ConsumerStatefulWidget {
   const _ErgTile();
 
-  static const _steps = [-25, -10, -5, 5, 10, 25];
+  @override
+  ConsumerState<_ErgTile> createState() => _ErgTileState();
+}
+
+class _ErgTileState extends ConsumerState<_ErgTile> {
+  static const _steps = [5, 10, 25];
+  int _step = 5;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
     final lock = ref.watch(targetLockProvider);
     final following = lock != null;
@@ -271,70 +277,69 @@ class _ErgTile extends ConsumerWidget {
     final c = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
 
+    final why = switch (lock) {
+      TargetLock.plan => 'The plan sets the target. Stop the plan to adjust it.',
+      TargetLock.simulation =>
+        'The route sets the resistance. Stop the route to adjust it.',
+      null => null,
+    };
+    Widget button(int delta) => Tooltip(
+          message: why ??
+              (delta > 0 ? 'Raise target by $delta W' : 'Lower target by ${-delta} W'),
+          child: IconButton.filledTonal(
+            icon: Icon(delta > 0 ? Icons.add : Icons.remove),
+            onPressed: following ? null : () => c.adjustTarget(delta),
+          ),
+        );
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(children: [
+          button(-_step),
+          Expanded(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Tooltip(
                 message: 'ERG mode: the trainer holds this power whatever your '
                     'cadence.\nArrow up/down: ±5 W. Shift + arrow: ±25 W.',
                 child: Text(
                     switch (lock) {
-                      TargetLock.plan => 'ERG target · set by plan',
+                      TargetLock.plan => 'ERG target · plan',
                       TargetLock.simulation => 'Simulation · grade',
                       null => 'ERG target',
                     },
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium),
               ),
-              const Spacer(),
-              Text(grade != null ? '${grade.toStringAsFixed(1)}%' : '$target W',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  )),
-            ]),
-            // Full-height, equal-width buttons: easy to hit mid-effort. Centred
-            // in the space under the header rather than pinned to the bottom.
-            Expanded(
-              child: Center(
-                child: Row(children: [
-                  for (final step in _steps)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: Tooltip(
-                          message: following
-                              ? (lock == TargetLock.plan
-                                  ? 'The plan sets the target. Stop the plan to adjust it.'
-                                  : 'The route sets the resistance. Stop the route to adjust it.')
-                              : step > 0
-                              ? 'Raise target by $step W'
-                              : 'Lower target by ${-step} W',
-                          child: FilledButton.tonal(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 56),
-                              padding: EdgeInsets.zero,
-                            ),
-                            onPressed: following ? null : () => c.adjustTarget(step),
-                            child: Text(
-                              step > 0 ? '+$step' : '−${-step}',
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ]),
+              Flexible(
+                child: FittedBox(
+                  child: Text(
+                      grade != null ? '${grade.toStringAsFixed(1)}%' : '$target W',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      )),
+                ),
               ),
-            ),
-          ],
-        ),
+              Tooltip(
+                message: 'Change the step size',
+                child: InkWell(
+                  onTap: following
+                      ? null
+                      : () => setState(() =>
+                          _step = _steps[(_steps.indexOf(_step) + 1) % _steps.length]),
+                  child: Text('±$_step W',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(decoration: TextDecoration.underline)),
+                ),
+              ),
+            ]),
+          ),
+          button(_step),
+        ]),
       ),
     );
   }

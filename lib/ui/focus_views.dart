@@ -24,7 +24,7 @@ class MetricStrip extends StatelessWidget {
 
   final bool compact;
 
-  static const rowHeight = 116.0, gap = 12.0;
+  static const rowHeight = 100.0, gap = 12.0;
 
   /// Total height for the given layout.
   static double heightFor(bool compact) =>
@@ -41,7 +41,7 @@ class MetricStrip extends StatelessWidget {
             ],
           ]),
         );
-    const big = [(TileKind.powerAvg, 2), (TileKind.ergTarget, 3)];
+    const big = [(TileKind.powerAvg, 3), (TileKind.ergTarget, 2)];
     const small = [
       (TileKind.cadence, 1),
       (TileKind.speed, 1),

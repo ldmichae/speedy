@@ -11,7 +11,7 @@ enum TileKind {
   distance('Distance', rideOnly: true),
   avgPower('Avg power', rideOnly: true),
   energy('Energy', rideOnly: true),
-  ergTarget('ERG target', span: 3, rows: 2, minSpan: 2, minRows: 2),
+  ergTarget('ERG target', span: 2, minSpan: 2),
   chart('Chart', span: 3, rows: 4, minSpan: 2, minRows: 3, rideOnly: true),
   route('Route map', span: 3, rows: 4, minSpan: 2, minRows: 3, rideOnly: true);
 
@@ -89,13 +89,13 @@ class DashboardLayout {
   static const standard = DashboardLayout(
     left: [
       TileConfig(TileKind.powerAvg, 3, 2),
-      TileConfig(TileKind.ergTarget, 3, 2),
+      TileConfig(TileKind.ergTarget, 3, 1),
       TileConfig(TileKind.cadence, 1, 1),
       TileConfig(TileKind.speed, 1, 1),
       TileConfig(TileKind.heartRate, 1, 1),
     ],
     right: [
-      TileConfig(TileKind.chart, 3, 4),
+      TileConfig(TileKind.chart, 3, 3),
       TileConfig(TileKind.distance, 1, 1),
       TileConfig(TileKind.avgPower, 1, 1),
       TileConfig(TileKind.energy, 1, 1),
