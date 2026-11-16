@@ -13,12 +13,16 @@ class ElevationChart extends ConsumerWidget {
       required this.profile,
       this.height = 80,
       this.riderMeters,
+      this.markers = const [],
       this.yMin,
       this.yMax});
 
   final ElevationProfile profile;
   final double height;
   final double? riderMeters;
+
+  /// Other riders (ghosts): where they are and their colour.
+  final List<(double, Color)> markers;
 
   /// Fixed height range, so charts side by side share one scale.
   final double? yMin, yMax;
@@ -34,7 +38,7 @@ class ElevationChart extends ConsumerWidget {
         width: double.infinity,
         child: CustomPaint(
             painter: _ElevationPainter(profile, riderMeters, scheme.tertiary,
-                scheme.onSurfaceVariant, yMin, yMax, units)),
+                scheme.onSurfaceVariant, yMin, yMax, units, markers)),
       ),
     );
   }
@@ -43,8 +47,9 @@ class ElevationChart extends ConsumerWidget {
 class _ElevationPainter extends CustomPainter {
   _ElevationPainter(
       this.p, this.rider, this.color, this.textColor, this.yMin, this.yMax,
-      this.units);
+      this.units, this.markers);
   final UnitSystem units;
+  final List<(double, Color)> markers;
   final double? yMin, yMax;
   final ElevationProfile p;
   final double? rider;
@@ -96,6 +101,13 @@ class _ElevationPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..strokeJoin = StrokeJoin.round);
+
+    // Ghosts under the rider, so your own dot is never hidden.
+    for (final (d, c) in markers) {
+      final m = at(d, p.elevationAt(d));
+      canvas.drawCircle(m, 5, Paint()..color = Colors.white);
+      canvas.drawCircle(m, 3.5, Paint()..color = c);
+    }
 
     final r = rider;
     if (r != null) {

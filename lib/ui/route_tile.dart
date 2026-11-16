@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/route.dart';
 import '../core/units.dart';
+import 'compete_controller.dart';
+import 'compete_screen.dart';
 import 'elevation_chart.dart';
 import 'route_controller.dart';
 import 'route_map.dart';
@@ -63,6 +65,11 @@ class _RouteMapTileState extends ConsumerState<RouteMapTile> {
 
   @override
   Widget build(BuildContext context) {
+    // A Compete course has no road to map: show the race instead.
+    if (ref.watch(competeProvider.select((r) => r != null))) {
+      _ready = false; // the map is unmounted; don't move it
+      return const RaceView();
+    }
     final progress = ref.watch(routeProgressProvider);
     ref.listen(routeProgressProvider, (_, p) {
       if (p == null || !_ready) return;

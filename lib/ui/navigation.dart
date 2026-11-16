@@ -9,6 +9,7 @@ enum AppPage {
   ride('Ride', Icons.directions_bike_outlined, Icons.directions_bike),
   routes('Routes', Icons.map_outlined, Icons.map),
   tours('Tours', Icons.hiking, Icons.hiking),
+  compete('Compete', Icons.emoji_events_outlined, Icons.emoji_events),
   plans('Plans', Icons.list_alt_outlined, Icons.list_alt),
   history('History', Icons.history, Icons.history),
   preferences('Preferences', Icons.settings_outlined, Icons.settings);

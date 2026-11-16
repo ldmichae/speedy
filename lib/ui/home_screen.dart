@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../devices/trainer.dart';
 import 'connect_view.dart';
 import 'dashboard_view.dart';
+import 'compete_screen.dart';
 import 'history_screen.dart';
 import 'layout.dart';
 import 'navigation.dart';
@@ -33,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         AppPage.ride => const _RidePage(),
         AppPage.routes => const RoutesScreen(),
         AppPage.tours => const ToursScreen(),
+        AppPage.compete => const CompeteScreen(),
         AppPage.plans => const PlansScreen(),
         AppPage.history => const HistoryScreen(),
         AppPage.preferences => const PreferencesScreen(),
