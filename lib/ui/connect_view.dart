@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../devices/trainer.dart';
+import 'heart_rate_controller.dart';
 import 'trainer_controller.dart';
 
 class ConnectView extends ConsumerWidget {
@@ -71,6 +72,69 @@ class ConnectView extends ConsumerWidget {
                     'other app is connected to it, then try again.',
             style: theme.textTheme.bodyMedium,
           ),
+        ],
+        const SizedBox(height: 32),
+        const Divider(),
+        const SizedBox(height: 16),
+        const _HeartRateSection(),
+      ],
+    );
+  }
+}
+
+/// Optional heart rate strap, connected separately from the trainer.
+class _HeartRateSection extends ConsumerWidget {
+  const _HeartRateSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(heartRateControllerProvider);
+    final c = ref.read(heartRateControllerProvider.notifier);
+    final theme = Theme.of(context);
+    final busy = s.status == TrainerStatus.connecting;
+    final connected = s.status == TrainerStatus.connected;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Heart rate monitor (optional)', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          'Wake your strap by putting it on, then connect it here. Its reading '
+          "replaces any heart rate the trainer reports.",
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        if (connected)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.favorite, color: Colors.red),
+            title: Text(s.deviceName ?? 'Heart rate monitor'),
+            subtitle: Text(s.bpm == null ? 'Waiting for a reading…' : '${s.bpm} bpm'),
+            trailing: TextButton(
+                onPressed: c.disconnect, child: const Text('Disconnect')),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: busy || s.scanning ? null : c.scan,
+            icon: const Icon(Icons.favorite_border),
+            label: Text(busy
+                ? 'Connecting to ${s.deviceName ?? 'strap'}…'
+                : s.scanning
+                    ? 'Scanning…'
+                    : 'Find heart rate monitor'),
+          ),
+        if (!kIsWeb && !connected && s.scanResults.isNotEmpty)
+          for (final r in s.scanResults)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.favorite_border),
+              title: Text(r.name),
+              onTap: busy ? null : () => c.connectTo(r),
+            ),
+        if (s.error != null) ...[
+          const SizedBox(height: 8),
+          Text(s.error!, style: TextStyle(color: theme.colorScheme.error)),
         ],
       ],
     );

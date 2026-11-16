@@ -12,6 +12,7 @@ import '../devices/ftms/ftms_trainer.dart';
 import '../devices/simulated/simulated_trainer.dart';
 import '../devices/trainer.dart';
 import '../devices/trainer_session.dart';
+import 'heart_rate_controller.dart';
 
 final bleTransportProvider =
     Provider<BleTransport>((ref) => UniversalBleTransport());
@@ -156,7 +157,21 @@ class TrainerController extends Notifier<TrainerState> {
   }
 
   void _onReading(Reading r) {
-    state = state.copyWith(latest: r.data, smoothedPower: r.smoothedPower);
+    final d = r.data;
+    // A connected strap beats the trainer's own heart rate pass-through.
+    final strap = ref.read(heartRateControllerProvider).bpm;
+    final data = strap == null
+        ? d
+        : BikeData(
+            powerWatts: d.powerWatts,
+            cadenceRpm: d.cadenceRpm,
+            speedKph: d.speedKph,
+            heartRate: strap,
+            resistanceLevel: d.resistanceLevel,
+            distanceMeters: d.distanceMeters,
+            elapsedSeconds: d.elapsedSeconds,
+          );
+    state = state.copyWith(latest: data, smoothedPower: r.smoothedPower);
   }
 
   Future<void> setTarget(int watts) async {

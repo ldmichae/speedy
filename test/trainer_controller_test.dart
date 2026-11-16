@@ -2,7 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/devices/ble/ble_transport.dart';
 import 'package:indoor_cycling/devices/trainer.dart';
+import 'package:indoor_cycling/ui/heart_rate_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
+import 'package:indoor_cycling/devices/ble/uuids.dart';
+import 'dart:async';
+import 'dart:typed_data';
 
 import 'fakes/in_memory_ble_transport.dart';
 
@@ -75,6 +79,40 @@ void main() {
     expect(container.read(trainerControllerProvider).scanning, isFalse);
     expect(transport.stopped, isTrue);
   });
+
+  test('a heart rate strap replaces the trainer heart rate', () async {
+    final hr = StreamController<Uint8List>.broadcast();
+    final container = ProviderContainer(overrides: [
+      bleTransportProvider.overrideWithValue(StrapTransport(hr.stream)),
+    ]);
+    addTearDown(container.dispose);
+    final strap = container.read(heartRateControllerProvider.notifier);
+    await strap.connectTo(const BleScanResult(id: 'h', name: 'HRM-Pro'));
+    expect(container.read(heartRateControllerProvider).status,
+        TrainerStatus.connected);
+
+    hr.add(Uint8List.fromList([0x00, 142])); // 8-bit bpm
+    await until(() => container.read(heartRateControllerProvider).bpm == 142);
+
+    await container.read(trainerControllerProvider.notifier).connectSimulated();
+    await until(() =>
+        container.read(trainerControllerProvider).latest?.heartRate == 142);
+
+    await strap.disconnect();
+    expect(container.read(heartRateControllerProvider).bpm, isNull);
+    await container.read(trainerControllerProvider.notifier).disconnect();
+  });
+}
+
+/// A heart rate strap whose measurements come from [hr].
+class StrapTransport extends InMemoryBleTransport {
+  StrapTransport(this.hr) : super(services: [heartRateService]);
+  final Stream<Uint8List> hr;
+
+  @override
+  Future<Stream<Uint8List>> subscribe(String deviceId, String service,
+          String characteristic, {bool indicate = false}) async =>
+      hr;
 }
 
 /// Replays a fixed list of scan results once a scan starts.
