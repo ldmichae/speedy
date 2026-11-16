@@ -46,7 +46,10 @@ void main() {
       course: course.id,
       name: 'Sam',
       t: [0, 300],
-      d: [0, course.route.lengthMeters]);
+      d: [0, course.route.lengthMeters],
+      power: [250, 280],
+      hr: [150, 170],
+      kg: 70);
 
   testWidgets('the catalog lists every course and opens one', (t) async {
     await open(t, const CompeteScreen());
@@ -83,6 +86,8 @@ void main() {
     expect(c.read(recorderProvider).status, RecStatus.recording);
     expect(find.textContaining('to go'), findsOneWidget);
     expect(find.textContaining('ahead'), findsOneWidget);
+    expect(find.text('You'), findsOneWidget);
+    expect(find.text('250 W · 3.6 W/kg · 150 bpm'), findsOneWidget);
     expect(t.takeException(), isNull);
 
     // Stopping the route ends the race; the ride goes on.

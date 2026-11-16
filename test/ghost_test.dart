@@ -127,4 +127,61 @@ void main() {
       expect(store.rides.keys, ['x']);
     });
   });
+
+  group('effort', () {
+    Ghost effortful() => Ghost(
+        id: 'e',
+        course: 'c',
+        name: 'Sam',
+        t: [0, 10, 20],
+        d: [0, 100, 200],
+        power: [null, 250, 300],
+        hr: [null, 150, 160],
+        kg: 75);
+
+    test('is read as last recorded at or before a moment', () {
+      final g = effortful();
+      expect(g.effortAt(-1), (watts: null, bpm: null));
+      expect(g.effortAt(9.9), (watts: null, bpm: null));
+      expect(g.effortAt(10), (watts: 250, bpm: 150));
+      expect(g.effortAt(15), (watts: 250, bpm: 150));
+      expect(g.effortAt(99), (watts: 300, bpm: 160));
+    });
+
+    test('round-trips; old two-column files still load; nonsense is dropped',
+        () {
+      final back = Ghost.fromJson(effortful().toJson())!;
+      expect(back.power, [null, 250, 300]);
+      expect(back.hr, [null, 150, 160]);
+      expect(back.kg, 75);
+
+      final old = Ghost.fromJson(ghost().toJson())!; // no effort at all
+      expect(old.power, [null, null, null]);
+      expect(old.kg, isNull);
+      expect(ghost().toJson()['pts'], [[0, 0], [10, 100], [20, 200]]);
+
+      final odd = Ghost.fromJson({
+        'v': 1, 'id': 'x', 'course': 'c', 'name': 'n', 'kg': 900,
+        'pts': [[0, 0, -5, 'fast'], [5, 10, 99999, 300], [9, 20, 200.4, 140]],
+      })!;
+      expect(odd.power, [null, null, 200]);
+      expect(odd.hr, [null, null, 140]);
+      expect(odd.kg, isNull);
+    });
+
+    test('a trace keeps the effort of each point, including the finish', () {
+      final tr = GhostTrace(100)
+        ..add(5, 50, watts: 200, bpm: 140)
+        ..add(10, 120, watts: 220, bpm: 145);
+      expect(tr.power, [null, 200, 220]);
+      expect(tr.hr, [null, 140, 145]);
+    });
+
+    test('text leaves out what is not known', () {
+      expect(effortText(245, 162, 72), '245 W · 3.4 W/kg · 162 bpm');
+      expect(effortText(245, null, null), '245 W');
+      expect(effortText(null, 150, 72), '150 bpm');
+      expect(effortText(null, null, 72), isNull);
+    });
+  });
 }

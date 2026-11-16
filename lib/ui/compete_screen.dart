@@ -14,6 +14,7 @@ import 'elevation_chart.dart';
 import 'format.dart';
 import 'navigation.dart';
 import 'ride_view_controller.dart';
+import 'rider_profile_controller.dart';
 import 'route_controller.dart';
 import 'trainer_controller.dart';
 import 'units_controller.dart';
@@ -282,7 +283,9 @@ class _NameDialogState extends State<_NameDialog> {
           controller: _c,
           autofocus: true,
           decoration: const InputDecoration(
-              helperText: 'Shown to whoever races this ghost'),
+              helperText: 'Shown to whoever races this ghost, along with '
+                  'your power, heart rate and W/kg',
+              helperMaxLines: 2),
           onSubmitted: (v) => Navigator.pop(context, v),
         ),
         actions: [
@@ -311,6 +314,13 @@ class RaceView extends ConsumerWidget {
     final all = ref.watch(ghostsProvider).valueOrNull ?? const <Ghost>[];
     final connected = ref.watch(trainerControllerProvider
         .select((s) => s.status == TrainerStatus.connected));
+    final you = (
+      watts: ref.watch(
+          trainerControllerProvider.select((s) => s.smoothedPower?.round())),
+      bpm: ref.watch(
+          trainerControllerProvider.select((s) => s.latest?.heartRate)),
+      kg: ref.watch(riderProfileProvider.select((p) => p.weightKg)),
+    );
     if (run == null) return const SizedBox.shrink();
     // Before the start another route may still be running: ignore it.
     final p = run.started ? progress : null;
@@ -330,12 +340,22 @@ class RaceView extends ConsumerWidget {
       return g.ahead ? 'beat by $s s' : 'lost by $s s';
     }
 
-    Widget row(int i, Ghost g, Widget trailing) => Row(children: [
-          Icon(Icons.circle, size: 12, color: ghostColor(i)),
+    // A name with, under it, how hard they are working right now.
+    Widget row(Color dot, String name, String? effort, Widget trailing) =>
+        Row(children: [
+          Icon(Icons.circle, size: 12, color: dot),
           const SizedBox(width: 8),
           Expanded(
-              child: Text(ghostLabel(g, all),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (effort != null)
+                  Text(effort,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall),
+              ])),
           trailing,
         ]);
 
@@ -383,18 +403,24 @@ class RaceView extends ConsumerWidget {
           ]),
           if (p == null)
             for (final (i, g) in run.rivals.indexed)
-              row(i, g, Text('to beat ${_time(g.seconds)}'))
-          else
+              row(ghostColor(i), ghostLabel(g, all), null,
+                  Text('to beat ${_time(g.seconds)}'))
+          else ...[
+            if (res == null)
+              row(const Color(0xFF2563EB), 'You',
+                  effortText(you.watts, you.bpm, you.kg), const SizedBox()),
             for (final (i, s) in standings.indexed)
               row(
-                  i,
-                  s.ghost,
+                  ghostColor(i),
+                  ghostLabel(s.ghost, all),
+                  res == null ? effortText(s.watts, s.bpm, s.ghost.kg) : null,
                   // Arrow and words carry the direction, not colour.
                   Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(s.gap.ahead ? Icons.arrow_upward : Icons.arrow_downward,
                         size: 16),
                     Text(gap(s.gap), style: theme.textTheme.titleMedium),
                   ])),
+          ],
           const SizedBox(height: 8),
           Expanded(
             child: Stack(children: [

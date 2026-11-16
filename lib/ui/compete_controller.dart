@@ -11,6 +11,7 @@ import '../devices/trainer.dart';
 import 'format.dart';
 import 'recorder_controller.dart';
 import 'ride_session.dart';
+import 'rider_profile_controller.dart';
 import 'route_controller.dart';
 import 'trainer_controller.dart';
 
@@ -201,8 +202,11 @@ class CompeteController extends Notifier<CompeteRun?> {
     final run = state, rr = ref.read(routeRunProvider), trace = run?.trace;
     if (run == null || trace == null || run.result != null || rr == null) return;
     if (ref.read(recorderProvider).status != RecStatus.recording) return;
+    final trainer = ref.read(trainerControllerProvider);
     trace.add(_seconds - run.t0,
-        ref.read(liveRideStatsProvider).distanceMeters - rr.origin);
+        ref.read(liveRideStatsProvider).distanceMeters - rr.origin,
+        watts: trainer.smoothedPower?.round(),
+        bpm: trainer.latest?.heartRate);
     if (!trace.finished) return;
     final now = DateTime.now();
     final g = Ghost(
@@ -211,13 +215,17 @@ class CompeteController extends Notifier<CompeteRun?> {
         name: rideTitle(now),
         t: trace.t,
         d: trace.d,
+        power: trace.power,
+        hr: trace.hr,
+        kg: ref.read(riderProfileProvider).weightKg,
         mine: true);
     state = CompeteRun(run.course, run.rivals, t0: run.t0, trace: trace, result: g);
     ref.read(ghostsProvider.notifier).addMine(g).catchError((_) {});
   }
 }
 
-typedef Standing = ({Ghost ghost, GhostGap gap});
+/// A rival's gap, and how hard they were working at this point of the race.
+typedef Standing = ({Ghost ghost, GhostGap gap, int? watts, int? bpm});
 
 /// Each rival against the race in progress (none before the start); frozen
 /// at your finish, where a positive gap is how much faster you were.
@@ -233,6 +241,12 @@ final raceStandingsProvider = Provider<List<Standing>>((ref) {
   final meters = res?.meters ?? p.meters;
   return [
     for (final g in run.rivals)
-      (ghost: g, gap: gapTo(g, elapsed: elapsed, riderMeters: meters))
+      if (g.effortAt(elapsed) case (:final watts, :final bpm))
+        (
+          ghost: g,
+          gap: gapTo(g, elapsed: elapsed, riderMeters: meters),
+          watts: watts,
+          bpm: bpm,
+        )
   ];
 });
