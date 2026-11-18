@@ -21,7 +21,7 @@ class ToursScreen extends ConsumerWidget {
   const ToursScreen({super.key});
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final name = await showDialog<String>(
+    final choice = await showDialog<(String, bool)>(
       context: context,
       builder: (ctx) {
         final c = TextEditingController();
@@ -31,20 +31,36 @@ class ToursScreen extends ConsumerWidget {
             controller: c,
             autofocus: true,
             decoration: const InputDecoration(labelText: 'Name'),
-            onSubmitted: (v) => Navigator.pop(ctx, v),
+            onSubmitted: (v) => Navigator.pop(ctx, (v, false)),
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel')),
+            OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, (c.text, true)),
+                child: const Text('Whole route, then split')),
             FilledButton(
-                onPressed: () => Navigator.pop(ctx, c.text),
-                child: const Text('Next')),
+                onPressed: () => Navigator.pop(ctx, (c.text, false)),
+                child: const Text('Stage by stage')),
           ],
         );
       },
     );
-    if (name == null || !context.mounted) return;
+    if (choice == null || !context.mounted) return;
+    final (name, whole) = choice;
+    if (whole) {
+      // Drawn without elevation: each stage loads its own later, when asked.
+      final route =
+          await Navigator.of(context).push<SavedRoute>(MaterialPageRoute(
+        builder: (_) => RouteEditor(
+            title: 'Whole tour route',
+            initialName: name.trim(),
+            fetchElevationOnSave: false),
+      ));
+      if (route != null && context.mounted) await _split(context, ref, route);
+      return;
+    }
     final stage =
         await Navigator.of(context).push<SavedRoute>(MaterialPageRoute(
       builder: (_) => const RouteEditor(
@@ -62,10 +78,16 @@ class ToursScreen extends ConsumerWidget {
     }
   }
 
-  /// Picks a GPX, lets the rider choose where stages end, and makes the tour.
+  /// Picks a GPX and splits it into a tour.
   Future<void> _fromGpx(BuildContext context, WidgetRef ref) async {
     final route = await pickGpxRoute(context);
     if (route == null || !context.mounted) return;
+    await _split(context, ref, route);
+  }
+
+  /// Lets the rider choose where stages of [route] end, and makes the tour.
+  Future<void> _split(
+      BuildContext context, WidgetRef ref, SavedRoute route) async {
     final choice = await Navigator.of(context).push<(String, List<double>)>(
         MaterialPageRoute(builder: (_) => TourSplitScreen(route: route)));
     if (choice == null) return;
