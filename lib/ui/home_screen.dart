@@ -10,6 +10,9 @@ import 'layout.dart';
 import 'navigation.dart';
 import 'plan_screen.dart';
 import 'preferences_screen.dart';
+import 'recording_panel.dart';
+import 'ride_session.dart';
+import 'route_controller.dart';
 import 'route_screen.dart';
 import 'tour_screen.dart';
 import 'trainer_controller.dart';
@@ -40,9 +43,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         AppPage.preferences => const PreferencesScreen(),
       };
 
+  Future<void> _offerStage(int next) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Stage $next done'),
+        content: Text('Carry on into stage ${next + 1}?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Stop here')),
+          FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Continue')),
+        ],
+      ),
+    );
+    if (yes == true) {
+      ref.read(rideSessionProvider.notifier).continueTour();
+    } else if (yes == false && mounted) {
+      await endRide(context, ref);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final page = ref.watch(pageProvider);
+    ref.listen(nextStageProvider, (_, next) {
+      if (next != null) _offerStage(next);
+    });
     _opened.add(page);
     final body = IndexedStack(
       index: page.index,

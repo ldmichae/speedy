@@ -134,6 +134,7 @@ final targetLockProvider = Provider<TargetLock?>((ref) {
 class RideSession extends Notifier<RideSessionState> {
   int? _applied; // last plan target sent
   int _doneUpTo = 0; // tour stages before this index are marked ridden
+  double _from = 0, _at = 0; // where on the course this ride began, and is
 
   PlanRun? get _plan => state.plan;
   RouteRun? get _route => state.route;
@@ -153,10 +154,11 @@ class RideSession extends Notifier<RideSessionState> {
       final r = _route, c = r?.course;
       if (r == null || c is! Tour) return;
       final fresh = next.valueOrNull?.where((t) => t.id == c.id).firstOrNull;
-      if (fresh != null && !identical(fresh, c)) {
+      if (fresh != null && fresh.stageCount >= c.stageCount) {
         state = RideSessionState(
             plan: _plan,
-            route: RouteRun(fresh, r.origin, simulate: r.simulate));
+            route: RouteRun(fresh.throughStage(c.stageCount - 1), r.origin,
+                simulate: r.simulate));
       }
     });
     return const RideSessionState();
@@ -190,21 +192,41 @@ class RideSession extends Notifier<RideSessionState> {
   void stopPlan() => state = RideSessionState(route: _route);
 
   /// Starts recording (or resumes it) and puts the rider at the start of
-  /// [course], or of [stage] for a tour. [simulate] takes the target from any
+  /// [course], or of [stage] for a tour (the ride ends with that stage; see
+  /// [continueTour]), or [at] metres into the course. [simulate] takes the target from any
   /// plan; where elevation is not loaded yet it rides flat.
-  void startRoute(RideCourse course, {bool simulate = false, int stage = 0}) {
+  void startRoute(RideCourse course,
+      {bool simulate = false, int stage = 0, double? at}) {
+    final from = at ?? course.stageStart(stage);
+    stage = course.stageAt(from);
     final sim =
         simulate && (course.stageCount > 1 || course.elevationAt(0) != null);
     if (sim) stopPlan();
     ref.read(recorderProvider.notifier).startOrResume();
     _doneUpTo = stage;
+    _from = _at = from;
     state = RideSessionState(
         plan: _plan,
         route: RouteRun(
-            course,
-            ref.read(liveRideStatsProvider).distanceMeters -
-                course.stageStart(stage),
+            course is Tour ? course.throughStage(stage) : course,
+            ref.read(liveRideStatsProvider).distanceMeters - from,
             simulate: sim));
+    _syncRoute();
+  }
+
+  /// Adds the tour's next stage to the end of the one just finished. It
+  /// starts where the rider is now, so riding on while asked skips nothing.
+  void continueTour() {
+    final r = _route, c = r?.course;
+    if (r == null || c is! Tour) return;
+    final full = ref.read(toursProvider.notifier).byId(c.id);
+    if (full == null || full.stageCount <= c.stageCount) return;
+    state = RideSessionState(
+        plan: _plan,
+        route: RouteRun(
+            full.throughStage(c.stageCount),
+            ref.read(liveRideStatsProvider).distanceMeters - c.lengthMeters,
+            simulate: r.simulate));
     _syncRoute();
   }
 
@@ -217,6 +239,7 @@ class RideSession extends Notifier<RideSessionState> {
   }
 
   void stopRoute() {
+    _saveResume();
     final wasSim = _route?.simulate ?? false;
     state = RideSessionState(plan: _plan);
     if (wasSim) _leaveSim();
@@ -257,15 +280,33 @@ class RideSession extends Notifier<RideSessionState> {
         doneUpTo: _doneUpTo);
     if (t == null) return;
     _doneUpTo = t.doneUpTo;
+    _at = t.meters;
     for (final i in t.completed) {
       _complete(r.course as Tour, i);
     }
     if (t.prefetch != null) {
-      ref.read(tourElevationProvider.notifier).prefetch(t.prefetch!, t.meters);
+      // The whole tour, so the next stage is ready if the rider rides on.
+      final full = ref.read(toursProvider.notifier).byId(t.prefetch!.id);
+      ref
+          .read(tourElevationProvider.notifier)
+          .prefetch(full ?? t.prefetch!, t.meters);
     }
     if (t.grade != null) {
       ref.read(trainerControllerProvider.notifier).setGrade(t.grade!);
     }
+  }
+
+  /// A tour ride that stopped partway through a stage is picked up there
+  /// next time; one that ended at a stage's finish clears the point. A ride
+  /// that went nowhere leaves any earlier point alone.
+  void _saveResume() {
+    final c = _route?.course;
+    if (c is! Tour || _at <= _from) return;
+    final mid = _at < c.lengthMeters ? _at : null;
+    ref
+        .read(toursProvider.notifier)
+        .setResume(c.id, mid)
+        .catchError((_) {}); // losing a resume point is not worth an error
   }
 
   /// Ticks a stage off. If the write fails, the stage is tried again on the

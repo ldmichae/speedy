@@ -194,7 +194,10 @@ class TourScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, Tour tour, int stage, bool sim) {
     ref
         .read(rideSessionProvider.notifier)
-        .startRoute(tour, simulate: sim, stage: stage);
+        .startRoute(tour,
+            simulate: sim,
+            stage: stage,
+            at: tour.resumeStage == stage ? tour.resumeAt : null);
     Navigator.of(context).popUntil((r) => r.isFirst);
     ref.read(pageProvider.notifier).state = AppPage.ride;
   }
@@ -347,6 +350,12 @@ class _StageTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final done = tour.completed.contains(index);
     final ele = stage.elevation;
+    final resume = tour.resumeStage == index
+        ? tour.resumeAt! - tour.stageStart(index)
+        : null;
+    final from = resume == null
+        ? 'from this stage'
+        : 'from ${routeDistanceText(resume, units)} in';
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
       leading: CircleAvatar(
@@ -365,8 +374,19 @@ class _StageTile extends ConsumerWidget {
           ),
         if (load?.message != null)
           Text(load!.message!, style: TextStyle(color: scheme.error)),
+        if (resume != null)
+          Row(children: [
+            Flexible(
+                child: Text(
+                    'Stopped ${routeDistanceText(resume, units)} in')),
+            TextButton(
+              onPressed: () =>
+                  ref.read(toursProvider.notifier).setResume(tour.id, null),
+              child: const Text('Start over'),
+            ),
+          ]),
       ]),
-      isThreeLine: load != null,
+      isThreeLine: load != null || resume != null,
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         if (ele == null)
           TextButton(
@@ -380,14 +400,14 @@ class _StageTile extends ConsumerWidget {
         ),
         IconButton(
           tooltip: connected
-              ? 'Ride from this stage in ERG (starts recording)'
+              ? 'Ride $from in ERG (starts recording)'
               : 'Connect a trainer to ride',
           icon: const Icon(Icons.play_arrow),
           onPressed: connected ? () => onRide(false) : null,
         ),
         IconButton(
           tooltip: connected
-              ? 'Ride from this stage with simulated climbs'
+              ? 'Ride $from with simulated climbs'
               : 'Connect a trainer to ride',
           icon: const Icon(Icons.terrain),
           onPressed: connected ? () => onRide(true) : null,

@@ -9,8 +9,10 @@ import '../core/json_store.dart';
 import '../core/prefs.dart';
 import '../core/route.dart';
 import '../core/route_service.dart';
+import '../core/tour.dart';
 import 'recorder_controller.dart';
 import 'ride_session.dart';
+import 'tour_controller.dart';
 
 /// Overridable so tests never touch the network.
 final routeSnapperProvider = Provider<RouteSnapper>((ref) => OsrmSnapper());
@@ -112,6 +114,17 @@ final routeProgressProvider = Provider<RouteProgress?>((ref) {
   final ridden = ref.watch(liveRideStatsProvider).distanceMeters - run.origin;
   final m = ridden.clamp(0.0, run.course.lengthMeters).toDouble();
   return RouteProgress(run.course, m, run.course.positionAt(m));
+});
+
+/// The tour stage to offer next: set once the stage being ridden is finished
+/// and the tour has another after it.
+final nextStageProvider = Provider<int?>((ref) {
+  final p = ref.watch(routeProgressProvider);
+  final c = p?.course;
+  if (p == null || !p.finished || c is! Tour) return null;
+  final full = ref.watch(toursProvider
+      .select((a) => a.valueOrNull?.where((t) => t.id == c.id).firstOrNull));
+  return full != null && full.stageCount > c.stageCount ? c.stageCount : null;
 });
 
 /// Which roads new route segments may use. Remembered between sessions.

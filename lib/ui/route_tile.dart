@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/route.dart';
+import '../core/tour.dart';
 import '../core/units.dart';
 import 'compete_controller.dart';
 import 'compete_screen.dart';
@@ -25,17 +26,17 @@ class RouteMapTile extends ConsumerStatefulWidget {
 
   static String label(RouteProgress p, UnitSystem u) {
     final c = p.course;
-    if (p.finished) return '${c.name} · finished';
+    // A tour is ridden a stage at a time: the course ends with this stage.
+    if (p.finished) {
+      return c is Tour ? 'Stage ${c.stageCount} done' : '${c.name} · finished';
+    }
     final g = c.gradeAt(p.meters);
     final grade = g == null ? '' : ' · ${g.toStringAsFixed(1)}%';
-    if (c.stageCount == 1) {
-      return '${c.name} · ${routeDistanceText(c.lengthMeters - p.meters, u)} to go$grade';
-    }
+    final toGo = routeDistanceText(c.lengthMeters - p.meters, u);
+    if (c is! Tour) return '${c.name} · $toGo to go$grade';
     final loading =
         c.stage(p.stage).elevation == null ? ' · no elevation yet' : '';
-    return 'Stage ${p.stage + 1}/${c.stageCount} · '
-        '${routeDistanceText(p.stageRemaining, u)} to go · '
-        '${routeDistanceText(c.lengthMeters - p.meters, u)} left$grade$loading';
+    return 'Stage ${p.stage + 1} of ${c.name} · $toGo to go$grade$loading';
   }
 
   @override

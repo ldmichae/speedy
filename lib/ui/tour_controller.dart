@@ -56,6 +56,13 @@ class ToursController extends AsyncNotifier<List<Tour>> {
     await upsert(t.withStage(index, t.stage(index).withElevation(e)));
   }
 
+  /// Where the next ride of this tour starts (null: a stage's start).
+  Future<void> setResume(String id, double? at) async {
+    final t = byId(id);
+    if (t == null || t.resumeAt == at) return;
+    await upsert(t.withResume(at));
+  }
+
   Future<void> markCompleted(String id, int index) async {
     final t = byId(id);
     if (t == null || t.completed.contains(index)) return;

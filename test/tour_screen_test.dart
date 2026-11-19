@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:indoor_cycling/core/ride_stats.dart';
 import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/units.dart';
 import 'package:indoor_cycling/core/route_service.dart';
@@ -11,6 +12,7 @@ import 'package:indoor_cycling/core/tour.dart';
 import 'package:indoor_cycling/ui/elevation_chart.dart';
 import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/elevation_service.dart';
+import 'package:indoor_cycling/ui/recorder_controller.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/route_map.dart';
 import 'package:indoor_cycling/ui/route_tile.dart';
@@ -100,12 +102,47 @@ void main() {
     c.read(rideSessionProvider.notifier).startRoute(c.read(toursProvider).value!.single, stage: 1);
     await t.pump();
     final text = RouteMapTile.label(c.read(routeProgressProvider)!, UnitSystem.metric);
-    expect(text, startsWith('Stage 2/2'));
+    expect(text, startsWith('Stage 2 of Alps'));
     expect(text, contains('to go'));
-    expect(text, contains('left'));
     // the stage you start on is prefetched at once, so its grade is already known
     expect(text, contains('%'));
     expect(text, isNot(contains('no elevation yet')));
     c.read(rideSessionProvider.notifier).stopRoute();
+  });
+
+  test('a tour ride ends with its stage, then rides on into the next if asked',
+      () async {
+    final dist = StateProvider<double>((_) => 0);
+    final c = ProviderContainer(overrides: [
+      tourStoreProvider.overrideWithValue(
+          InMemoryJsonStore()..rides['t1'] = jsonEncode(tour.toJson())),
+      elevationSourceProvider.overrideWithValue(_Hills()),
+      liveRideStatsProvider.overrideWith((ref) => RideStats(
+          duration: Duration.zero,
+          distanceMeters: ref.watch(dist),
+          avgPower: null,
+          kcal: null)),
+    ]);
+    addTearDown(c.dispose);
+    c.listen(nextStageProvider, (_, __) {});
+    await c.read(toursProvider.future);
+    final day1 = tour.stage(0).lengthMeters;
+    c.read(rideSessionProvider.notifier).startRoute(tour);
+    expect(c.read(nextStageProvider), isNull);
+
+    c.read(dist.notifier).state = day1 + 50; // past the line, still riding
+    expect(c.read(routeProgressProvider)!.finished, isTrue);
+    expect(c.read(nextStageProvider), 1);
+
+    c.read(rideSessionProvider.notifier).continueTour();
+    final p = c.read(routeProgressProvider)!;
+    expect(p.stage, 1);
+    expect(p.meters, closeTo(day1, 0.001)); // the 50 m ridden on are not skipped
+    expect(c.read(nextStageProvider), isNull);
+
+    c.read(dist.notifier).state = 1e6;
+    expect(RouteMapTile.label(c.read(routeProgressProvider)!, UnitSystem.metric),
+        'Stage 2 done');
+    expect(c.read(nextStageProvider), isNull); // no stage 3 to offer
   });
 }

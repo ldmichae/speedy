@@ -223,6 +223,53 @@ void main() {
       expect(c.read(toursProvider).value!.single.completed, isEmpty);
       c.read(recorderProvider.notifier).discard();
     });
+
+    test('a ride stopped mid-stage is picked up there next time', () async {
+      final c = make();
+      await c.read(toursProvider.future);
+      await c.read(toursProvider.notifier).upsert(tour);
+      Tour now() => c.read(toursProvider).value!.single;
+      final session = c.read(rideSessionProvider.notifier);
+      final at = now().stageStart(1) + 300;
+
+      session.startRoute(now(), stage: 1);
+      c.read(meters.notifier).state = 300;
+      await tick(c);
+      c.read(recorderProvider.notifier).discard(); // ends the ride
+      await settle();
+      expect(now().resumeAt, closeTo(at, 1e-6));
+      expect(now().resumeStage, 1);
+      expect(store.rides['t1'], contains('"at"'));
+
+      // a separate ride, starting where the last one stopped
+      c.read(meters.notifier).state = 0;
+      session.startRoute(now(), stage: 1, at: now().resumeAt);
+      expect(c.read(routeProgressProvider)!.meters, closeTo(at, 1e-6));
+      session.stopRoute(); // went nowhere: the point is kept
+      await settle();
+      expect(now().resumeAt, closeTo(at, 1e-6));
+
+      session.startRoute(now(), stage: 1, at: now().resumeAt);
+      c.read(meters.notifier).state = 1e6; // to the stage's finish
+      await tick(c);
+      session.stopRoute();
+      await settle();
+      expect(now().resumeAt, isNull);
+      expect(now().completed, contains(1));
+      c.read(recorderProvider.notifier).discard();
+    });
+  });
+
+  test('the resume point survives storage and elevation, not a length edit',
+      () {
+    final t = Tour('t', 'T', [stage('a', 0), stage('b', 0.01)]).withResume(500);
+    expect(Tour.fromJson(t.toJson())!.resumeAt, 500);
+    expect(Tour.fromJson({...t.toJson(), 'at': 1e9})!.resumeAt, isNull);
+    final same = t.stage(0).withElevation(ElevationProfile.fromSamples(
+        [0, t.stage(0).lengthMeters], [0, 10]));
+    expect(t.withStage(0, same).resumeAt, 500);
+    const a = LatLng(0, 0), b = LatLng(0.03, 0);
+    expect(t.withStage(0, SavedRoute('long', [a, b], [a, b])).resumeAt, isNull);
   });
 
   test('RouteProgress reports the stage you are in', () {

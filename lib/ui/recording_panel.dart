@@ -7,6 +7,57 @@ import 'layout.dart';
 import 'power_fun.dart';
 import 'recorder_controller.dart';
 
+/// Asks to save, discard or keep riding, and does it.
+Future<void> endRide(BuildContext context, WidgetRef ref) async {
+  final c = ref.read(recorderProvider.notifier);
+  final summary = c.requestStop();
+  if (summary == null) return;
+
+  final choice = await showDialog<StopChoice>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('End ride?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RideStatRow(stats: summary.stats),
+          const SizedBox(height: 12),
+          PowerFun(joules: summary.joules, title: 'This ride'),
+          const SizedBox(height: 12),
+          Text('Saves to history and exports as '
+              '${ref.read(rideFormatProvider).label} (change in Preferences).'),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, StopChoice.keepGoing),
+            child: const Text('Keep riding')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, StopChoice.discard),
+            child: const Text('Discard')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, StopChoice.save),
+            child: const Text('Save')),
+      ],
+    ),
+  );
+  if (!context.mounted) return;
+
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final path = await c.finish(choice ?? StopChoice.keepGoing, summary);
+    if (path != null) {
+      messenger.showSnackBar(SnackBar(content: Text('Saved to $path')));
+    }
+  } catch (e) {
+    // Recording is intact; the user can retry or discard.
+    messenger.showSnackBar(SnackBar(
+        content: Text("Couldn't save the ride ($e). Your recording is "
+            'kept: press Stop to try again, or Discard.')));
+  }
+}
+
 /// Timer and record/pause/stop controls. Always visible, so starting a ride
 /// does not move anything on screen.
 class WorkoutBar extends ConsumerWidget {
@@ -14,56 +65,6 @@ class WorkoutBar extends ConsumerWidget {
 
   /// Shown at the end of the row, after the controls.
   final Widget? trailing;
-
-  Future<void> _stop(BuildContext context, WidgetRef ref) async {
-    final c = ref.read(recorderProvider.notifier);
-    final summary = c.requestStop();
-    if (summary == null) return;
-
-    final choice = await showDialog<StopChoice>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('End ride?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RideStatRow(stats: summary.stats),
-            const SizedBox(height: 12),
-            PowerFun(joules: summary.joules, title: 'This ride'),
-            const SizedBox(height: 12),
-            Text('Saves to history and exports as '
-                '${ref.read(rideFormatProvider).label} (change in Preferences).'),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, StopChoice.keepGoing),
-              child: const Text('Keep riding')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, StopChoice.discard),
-              child: const Text('Discard')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, StopChoice.save),
-              child: const Text('Save')),
-        ],
-      ),
-    );
-    if (!context.mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final path = await c.finish(choice ?? StopChoice.keepGoing, summary);
-      if (path != null) {
-        messenger.showSnackBar(SnackBar(content: Text('Saved to $path')));
-      }
-    } catch (e) {
-      // Recording is intact; the user can retry or discard.
-      messenger.showSnackBar(SnackBar(
-          content: Text("Couldn't save the ride ($e). Your recording is "
-              'kept: press Stop to try again, or Discard.')));
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -115,7 +116,7 @@ class WorkoutBar extends ConsumerWidget {
           message: 'Stop and save or discard',
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(minimumSize: Size(0, big.height)),
-            onPressed: () => _stop(context, ref),
+            onPressed: () => endRide(context, ref),
             icon: const Icon(Icons.stop),
             label: const Text('Stop'),
           ),
