@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../core/route.dart';
 import '../core/world_path.dart';
 import 'compete_controller.dart';
 import 'compete_screen.dart' show ghostColor;
+import 'elevation_service.dart';
 import 'route_controller.dart';
 import 'route_tile.dart';
 import 'units_controller.dart';
@@ -134,12 +136,30 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
   /// camera the engine cannot fit its depth range, and far faces flicker.
   void _buildRoad(WorldPath path) {
     final last = path.points.length - 1;
-    final road = _group([
+    _pieces = [
       for (var s = 0; s < last; s += _piece)
-        ..._roadPiece(path, s, math.min(s + _piece, last)),
-    ]);
+        (
+          _group(_roadPiece(path, s, math.min(s + _piece, last))),
+          path.points[s],
+          path.points[math.min(s + _piece, last)],
+        ),
+    ];
+    final road = _group([for (final (node, _, _) in _pieces) node]);
     if (_road case final old?) _scene.remove(old);
     _scene.add(_road = road);
+  }
+
+  /// Each road piece and its ends, so pieces off the ground can be hidden.
+  var _pieces = <(Node, vm.Vector3, vm.Vector3)>[];
+
+  /// Shows only the road on the ground square around ([cx], [cz]): beyond
+  /// it the road would hang in the sky over nothing.
+  void _showRoadNear(double cx, double cz) {
+    bool on(vm.Vector3 p) =>
+        (p.x - cx).abs() < _groundHalf && (p.z - cz).abs() < _groundHalf;
+    for (final (node, a, b) in _pieces) {
+      node.visible = on(a) || on(b);
+    }
   }
 
   /// The road from sample [from] to [to]: asphalt, and the centre line.
@@ -204,16 +224,53 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
 
   late final _grass = _matte(); // coloured per vertex
 
+  static const _n = (2 * _groundHalf) ~/ _groundCell + 1; // posts a side
+
+  /// New ground around ([cx], [cz]) on the real terrain where it can be
+  /// read. The old ground stays until the heights arrive; with none yet,
+  /// made-up hills go down at once so the road is never in mid-air.
+  Future<void> _reground(double cx, double cz) async {
+    _groundAt = vm.Vector2(cx, cz);
+    final gen = ++_groundGen;
+    if (_ground == null) _buildGround(cx, cz, null);
+    final terrain = await _terrainAround(cx, cz);
+    if (!mounted || gen != _groundGen) return; // moved on meanwhile
+    if (terrain != null || _ground == null) _buildGround(cx, cz, terrain);
+  }
+
+  int _groundGen = 0;
+
+  /// The real heights for the ground square, or null where there are none to
+  /// read (web, offline) or they are not this road's ground (Compete).
+  Future<HeightGrid?> _terrainAround(double cx, double cz) async {
+    final tiles = ref.read(terrainTilesProvider);
+    final path = _path;
+    if (tiles == null || path == null) return null;
+    final x0 = cx - _groundHalf, z0 = cz - _groundHalf;
+    try {
+      final h = await tiles.elevations([
+        for (var r = 0; r < _n; r++)
+          for (var c = 0; c < _n; c++)
+            path.latLngOf(x0 + c * _groundCell, z0 + r * _groundCell),
+      ]);
+      final grid = HeightGrid(x0, z0, _groundCell, _n,
+          Float64List.fromList([for (final y in h) y - path.baseHeight]));
+      return grid.fits(path.near(cx, cz, _groundHalf)) ? grid : null;
+    } catch (_) {
+      return null; // offline or a bad tile: keep the made-up hills
+    }
+  }
+
   /// Ground and trees in a square around ([cx], [cz]), replacing the last.
-  void _buildGround(double cx, double cz) {
+  void _buildGround(double cx, double cz, HeightGrid? terrain) {
     final road = _path!.near(cx, cz, _groundHalf + 150);
-    const n = (2 * _groundHalf) ~/ _groundCell + 1;
+    const n = _n;
     final pos = <vm.Vector3>[], col = <vm.Vector4>[];
     for (var r = 0; r < n; r++) {
       for (var c = 0; c < n; c++) {
         final x = cx - _groundHalf + c * _groundCell;
         final z = cz - _groundHalf + r * _groundCell;
-        final g = groundAt(x, z, road);
+        final g = groundAt(x, z, road, terrain: terrain);
         final shade = 0.8 + 0.2 * math.sin(x / 37) * math.cos(z / 29);
         col.add(g.road < 4
             ? vm.Vector4(0.18, 0.15, 0.10, 1) // verge
@@ -255,7 +312,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     final crowns = InstancedMesh(
         geometry: CylinderGeometry(bottomRadius: 2.2, topRadius: 0, height: 6),
         material: _matte(vm.Vector4(0.03, 0.12, 0.03, 1)));
-    for (final t in treesAround(cx, cz, _groundHalf, road)) {
+    for (final t in treesAround(cx, cz, _groundHalf, road, terrain: terrain)) {
       vm.Matrix4 at(double y) =>
           vm.Matrix4.translation(vm.Vector3(t.x, t.y + y * t.size, t.z))
             ..scaleByVector3(vm.Vector3.all(t.size));
@@ -270,7 +327,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     ]);
     if (_ground case final old?) _scene.remove(old);
     _scene.add(_ground = ground);
-    _groundAt = vm.Vector2(cx, cz);
+    _showRoadNear(cx, cz);
   }
 
   void _syncCourse(RouteProgress p) {
@@ -279,7 +336,10 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     _builtFor = key;
     final path = _path = WorldPath.of(p.course);
     _buildRoad(path);
-    _groundAt = null; // rebuilt around the rider on the next frame
+    // The old course's ground goes; new ground on the next frame.
+    if (_ground case final old?) _scene.remove(old);
+    _ground = _groundAt = null;
+    _groundGen++; // and ground still loading for the old one is dropped
   }
 
   void _syncRivals(List<Standing> standings) {
@@ -313,7 +373,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     final at = path.at(_m), g = _groundAt;
     if (g == null || (vm.Vector2(at.x, at.z) - g).length > _regroundAfter) {
       // Snapped, so riding back and forth does not rebuild every frame.
-      _buildGround((at.x / 100).round() * 100.0, (at.z / 100).round() * 100.0);
+      _reground((at.x / 100).round() * 100.0, (at.z / 100).round() * 100.0);
     }
   }
 

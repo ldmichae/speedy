@@ -1,30 +1,42 @@
-// Throwaway: shows the World view riding a made-up winding, hilly route with
+// Throwaway: shows the World view riding a made-up winding route with
 // two ghosts, no trainer needed. flutter run -t tool/world_preview.dart
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:indoor_cycling/core/elevation.dart';
 import 'package:indoor_cycling/core/ghost.dart';
 import 'package:indoor_cycling/core/route.dart';
+import 'package:indoor_cycling/core/terrain_cache.dart';
+import 'package:indoor_cycling/core/terrain_tiles.dart';
 import 'package:indoor_cycling/ui/compete_controller.dart';
 import 'package:indoor_cycling/ui/route_controller.dart';
 import 'package:indoor_cycling/ui/world_view.dart';
 import 'package:latlong2/latlong.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Winding north through the hills south of Siena, heights from the real
+  // terrain tiles (made-up ones if they cannot be fetched).
   final path = [
     for (var i = 0; i <= 400; i++)
-      LatLng(46 + i * 0.0002, 7 + 0.004 * math.sin(i / 25)),
+      LatLng(43.20 + i * 0.0002, 11.40 + 0.004 * math.sin(i / 25)),
   ];
   final len = pathLength(path);
-  final route = SavedRoute('Preview', [path.first, path.last], path)
-      .withElevation(ElevationProfile.fromSamples([
-    for (var m = 0.0; m <= len; m += 25) m
-  ], [
-    for (var m = 0.0; m <= len; m += 25) 400 + 40 * math.sin(m / 700)
-  ]));
+  var route = SavedRoute('Preview', [path.first, path.last], path);
+  final client = http.Client();
+  try {
+    route = route.withElevation(await TerrainTileElevation(
+            fetch: httpTileFetcher(client), cache: createTerrainCache())
+        .profile(route));
+  } catch (_) {
+    route = route.withElevation(ElevationProfile.fromSamples(
+        [for (var m = 0.0; m <= len; m += 25) m],
+        [for (var m = 0.0; m <= len; m += 25) 400 + 40 * math.sin(m / 700)]));
+  }
+  client.close();
   final ghosts = [
     for (final (i, v) in [9.0, 11.0].indexed)
       Ghost(id: '$i', course: 'x', name: 'g$i', t: [0, len / v], d: [0, len]),

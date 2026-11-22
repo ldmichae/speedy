@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/course.dart';
 import 'package:indoor_cycling/core/world_path.dart';
+import 'package:vector_math/vector_math.dart';
 
 void main() {
   // A flat kilometre, then 6 km at 6%, then flat: due east along the equator.
@@ -80,5 +83,47 @@ void main() {
   test('a long course keeps a bounded number of points', () {
     expect(WorldPath.of(courseById('coast-loop-v1')!.route).points.length,
         lessThanOrEqualTo(20001));
+  });
+
+  test('local metres map back to where the course is', () {
+    final route = courseById('long-drag-v1')!.route;
+    final p = drag.at(5000), ll = drag.latLngOf(p.x, p.z);
+    final want = route.positionAt(5000);
+    expect(ll.latitude, closeTo(want.latitude, 1e-6));
+    expect(ll.longitude, closeTo(want.longitude, 1e-4)); // ~10 m
+  });
+
+  group('HeightGrid', () {
+    // A plane rising 1 m per metre east, posts every 10 m from (0, 0).
+    final plane = HeightGrid(
+        0,
+        0,
+        10,
+        11,
+        Float64List.fromList([
+          for (var r = 0; r < 11; r++)
+            for (var c = 0; c < 11; c++) c * 10.0
+        ]));
+
+    test('reads between posts and clamps outside', () {
+      expect(plane.at(25, 33), closeTo(25, 1e-9));
+      expect(plane.at(-50, 50), 0);
+      expect(plane.at(500, 50), 100);
+    });
+
+    test('fits a road lying on it, not one floating above', () {
+      final on = [for (var x = 0.0; x <= 100; x += 10) Vector3(x, x, 50)];
+      final above = [for (final p in on) p + Vector3(0, 200, 0)];
+      expect(plane.fits(on), isTrue);
+      expect(plane.fits(above), isFalse);
+      expect(plane.fits([Vector3(900, 0, 900)]), isFalse); // none on the grid
+    });
+
+    test('ground is under the road beside it, and the terrain away from it',
+        () {
+      final road = [for (var x = 0.0; x <= 100; x += 10) Vector3(x, 0, 0)];
+      expect(groundAt(50, 5, road, terrain: plane).y, -roadDepth);
+      expect(groundAt(50, 90, road, terrain: plane).y, closeTo(50, 1e-9));
+    });
   });
 }

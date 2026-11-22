@@ -13,14 +13,19 @@ import '../core/terrain_tiles.dart';
 /// tests never touch the network.
 final elevationSourceProvider = Provider<ElevationSource>((ref) {
   final meteo = OpenMeteoElevation();
-  if (kIsWeb) return meteo;
+  final tiles = ref.watch(terrainTilesProvider);
+  return tiles == null ? meteo : CompositeElevation(tiles, meteo);
+});
+
+/// The terrain tiles alone, for the World view's ground, which asks for
+/// thousands of points and must never fall back to a metered API. Null on
+/// web, where a browser cannot read them.
+final terrainTilesProvider = Provider<TerrainTileElevation?>((ref) {
+  if (kIsWeb) return null;
   final client = http.Client();
   ref.onDispose(client.close);
-  return CompositeElevation(
-    TerrainTileElevation(
-        fetch: httpTileFetcher(client), cache: createTerrainCache()),
-    meteo,
-  );
+  return TerrainTileElevation(
+      fetch: httpTileFetcher(client), cache: createTerrainCache());
 });
 
 /// Every elevation lookup goes through here, so a rate limit hit by one
