@@ -243,7 +243,11 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
 
     final up = vm.Vector3(0, 1, 0), down = vm.Vector3(0, -2, 0);
     final pts = path.points;
+    // A stretch with both ends on road already drawn is that road again.
+    bool repeat(int i) =>
+        i + 1 < pts.length && path.retraced[i] && path.retraced[i + 1];
     for (var i = from; i < to; i++) {
+      if (repeat(i)) continue;
       final r0 =
           WorldPath.rightOf(path.heading(i * path.step, span: path.step));
       final r1 =
@@ -262,6 +266,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     for (var m = (from * path.step / every).ceil() * every;
         m < end;
         m += every) {
+      if (repeat((m / path.step).floor())) continue;
       final r = WorldPath.rightOf(path.heading(m)) * half;
       final a = path.at(m), b = path.at(m + dash);
       final i = paint.addVertex(a - r);

@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_cycling/core/course.dart';
+import 'package:indoor_cycling/core/route.dart';
 import 'package:indoor_cycling/core/world_path.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:vector_math/vector_math.dart';
 
 void main() {
@@ -159,5 +161,31 @@ void main() {
       ..update(10, 1)
       ..update(22, 2);
     expect(f.speed, closeTo(12, 1e-9));
+  });
+
+  group('retraced road', () {
+    test('the way back of an out-and-back is the road already there', () {
+      final a = LatLng(45, 7), b = LatLng(45.01, 7); // ~1.1 km north
+      final path = WorldPath.of(SavedRoute('Out and back', [a, b], [a, b, a]));
+      final half = path.points.length ~/ 2;
+      expect(path.retraced.sublist(0, half), everyElement(isFalse));
+      // Past the turn (a sample or two to come round), all of it.
+      expect(path.retraced.sublist(half + 2), everyElement(isTrue));
+    });
+
+    test('a road that never comes back is all drawn', () {
+      expect(
+          retracedPoints([for (var i = 0; i < 100; i++) Vector3(i * 10, 0, 0)]),
+          everyElement(isFalse));
+    });
+
+    test('a bridge over the road is its own road', () {
+      final under = [for (var x = 0.0; x <= 200; x += 10) Vector3(x, 0, 0)];
+      final over = [for (var x = 200.0; x >= 0; x -= 10) Vector3(x, 8, 2)];
+      expect(retracedPoints([...under, ...over]), everyElement(isFalse));
+      final back = [for (var x = 200.0; x >= 0; x -= 10) Vector3(x, 1, 2)];
+      expect(retracedPoints([...under, ...back]).skip(under.length + 1),
+          everyElement(isTrue));
+    });
   });
 }

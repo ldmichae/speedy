@@ -72,12 +72,51 @@ class WorldPath {
   /// Rider's right for a [heading]: facing north (+z) it is east (+x).
   static Vector3 rightOf(Vector3 heading) => Vector3(heading.z, 0, -heading.x);
 
+  /// Which [points] lie on road the course has already been along (the way
+  /// back of an out-and-back, a lap ridden twice), so it is drawn once.
+  late final List<bool> retraced = retracedPoints(points);
+
   /// Road points within [radius] of ([x], [z]) (a square), for building
   /// ground and trees near the rider without scanning the whole course.
   List<Vector3> near(double x, double z, double radius) => [
         for (final p in points)
           if ((p.x - x).abs() < radius && (p.z - z).abs() < radius) p
       ];
+}
+
+/// For each of [points], whether an earlier one (not its neighbour) is
+/// within [within] metres across and [climb] metres up or down: the same
+/// road again. A bridge over the road is more than [climb] above it, so it
+/// stays its own road.
+List<bool> retracedPoints(List<Vector3> points,
+    {double within = 5, double climb = 4}) {
+  // Earlier points by 2D cell of [within] metres, so each check looks at
+  // the 3 x 3 cells around a point instead of the whole course.
+  final cells = <(int, int), List<int>>{};
+  (int, int) cell(Vector3 p) =>
+      ((p.x / within).floor(), (p.z / within).floor());
+  final out = List<bool>.filled(points.length, false);
+  for (var i = 0; i < points.length; i++) {
+    final p = points[i];
+    final (cx, cz) = cell(p);
+    search:
+    for (var dx = -1; dx <= 1; dx++) {
+      for (var dz = -1; dz <= 1; dz++) {
+        for (final j in cells[(cx + dx, cz + dz)] ?? const <int>[]) {
+          final q = points[j];
+          if (j < i - 1 &&
+              (q.y - p.y).abs() <= climb &&
+              (q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z) <=
+                  within * within) {
+            out[i] = true;
+            break search;
+          }
+        }
+      }
+    }
+    (cells[(cx, cz)] ??= []).add(i);
+  }
+  return out;
 }
 
 /// Real ground heights on a square grid of local metres (relative to the

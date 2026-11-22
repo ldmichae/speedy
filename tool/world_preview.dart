@@ -1,4 +1,4 @@
-// Throwaway: shows the World view riding a made-up winding route with
+// Throwaway: shows the World view riding a made-up out-and-back route with
 // two ghosts, pedalling at 90 rpm, no trainer needed. flutter run -t tool/world_preview.dart
 import 'dart:async';
 import 'dart:math' as math;
@@ -18,13 +18,15 @@ import 'package:latlong2/latlong.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Winding north through the hills south of Siena, heights from the real
-  // terrain tiles (made-up ones if they cannot be fetched).
-  final path = [
-    for (var i = 0; i <= 400; i++)
+  // Out and back along a winding road in the hills south of Siena, heights
+  // from the real terrain tiles (made-up ones if they cannot be fetched).
+  // Starts just before the turn, to show the way back on the same road.
+  final out = [
+    for (var i = 0; i <= 200; i++)
       LatLng(43.20 + i * 0.0002, 11.40 + 0.004 * math.sin(i / 25)),
   ];
-  final len = pathLength(path);
+  final path = [...out, ...out.reversed.skip(1)];
+  final len = pathLength(path), start = len / 2 - 150;
   var route = SavedRoute('Preview', [path.first, path.last], path);
   final client = http.Client();
   try {
@@ -39,7 +41,12 @@ Future<void> main() async {
   client.close();
   final ghosts = [
     for (final (i, v) in [9.0, 11.0].indexed)
-      Ghost(id: '$i', course: 'x', name: 'g$i', t: [0, len / v], d: [0, len]),
+      Ghost(
+          id: '$i',
+          course: 'x',
+          name: 'g$i',
+          t: [0, (len - start) / v],
+          d: [start, len]),
   ];
   final sw = Stopwatch()..start();
   double secs() => sw.elapsedMilliseconds / 1000;
@@ -49,7 +56,7 @@ Future<void> main() async {
       routeProgressProvider.overrideWith((ref) {
         final t = Timer(const Duration(milliseconds: 500), ref.invalidateSelf);
         ref.onDispose(t.cancel);
-        final m = math.min(secs() * 10, len);
+        final m = math.min(start + secs() * 10, len);
         return RouteProgress(route, m, route.positionAt(m));
       }),
       raceStandingsProvider.overrideWith((ref) {
@@ -60,7 +67,7 @@ Future<void> main() async {
           for (final g in ghosts)
             (
               ghost: g,
-              gap: gapTo(g, elapsed: s, riderMeters: s * 10),
+              gap: gapTo(g, elapsed: s, riderMeters: start + s * 10),
               watts: null,
               bpm: null,
               meters: g.distanceAt(s),
