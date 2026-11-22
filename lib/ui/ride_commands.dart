@@ -30,13 +30,20 @@ class RideCommands {
   /// Shifts the virtual gear by [gears]; does nothing outside SIM mode.
   void shift(int gears) =>
       _ref.read(trainerControllerProvider.notifier).shift(gears);
+
+  /// The arrow keys: one gear while a route sets the resistance (the target
+  /// is locked then anyway), otherwise the ERG target by [watts].
+  void nudge(int watts) =>
+      _ref.read(targetLockProvider) == TargetLock.simulation
+          ? shift(watts.sign)
+          : nudgeTarget(watts);
 }
 
 final rideCommandsProvider = Provider(RideCommands.new);
 
 /// Space records, pauses or resumes; the arrow keys move the target by 5 W
-/// (25 W with Shift). [onTop] says whether the screen is the one on top, not
-/// under a dialog or a pushed screen.
+/// (25 W with Shift), or shift one gear on a simulated route. [onTop] says
+/// whether the screen is the one on top, not under a dialog or a pushed screen.
 Map<ShortcutActivator, VoidCallback> rideShortcuts(
     RideCommands c, bool Function() onTop) {
   VoidCallback guarded(VoidCallback f) => () {
@@ -46,12 +53,12 @@ Map<ShortcutActivator, VoidCallback> rideShortcuts(
     const SingleActivator(LogicalKeyboardKey.space):
         guarded(c.toggleRecording),
     const SingleActivator(LogicalKeyboardKey.arrowUp):
-        guarded(() => c.nudgeTarget(5)),
+        guarded(() => c.nudge(5)),
     const SingleActivator(LogicalKeyboardKey.arrowDown):
-        guarded(() => c.nudgeTarget(-5)),
+        guarded(() => c.nudge(-5)),
     const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true):
-        guarded(() => c.nudgeTarget(25)),
+        guarded(() => c.nudge(25)),
     const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true):
-        guarded(() => c.nudgeTarget(-25)),
+        guarded(() => c.nudge(-25)),
   };
 }

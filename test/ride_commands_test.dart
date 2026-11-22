@@ -10,6 +10,8 @@ import 'package:indoor_cycling/ui/ride_commands.dart';
 import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 
+import 'simulation_test.dart' show route;
+
 void main() {
   late ProviderContainer c;
   late RideCommands cmd;
@@ -41,6 +43,26 @@ void main() {
         const Plan('p', [PlanBlock([PlanStep(60, 150)])]), null);
     cmd.nudgeTarget(25);
     expect(target(), 150);
+    c.read(recorderProvider.notifier).discard();
+  });
+
+  test('the arrows shift gears on a simulated route, else move the target',
+      () async {
+    int gear() => c.read(trainerControllerProvider).gear;
+    final before = target();
+    cmd.nudge(5);
+    expect(target(), before + 5);
+    expect(gear(), TrainerState.neutralGear);
+
+    c.read(rideSessionProvider.notifier).startRoute(route, simulate: true);
+    expect(c.read(targetLockProvider), TargetLock.simulation);
+    await pumpEventQueue();
+    cmd.nudge(25);
+    cmd.nudge(5);
+    cmd.nudge(-5);
+    await pumpEventQueue();
+    expect(gear(), TrainerState.neutralGear + 1);
+    expect(target(), before + 5);
     c.read(recorderProvider.notifier).discard();
   });
 

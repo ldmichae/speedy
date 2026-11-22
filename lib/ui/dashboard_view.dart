@@ -234,7 +234,8 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       }
 
       // Keyboard: Space records, pauses or resumes; the arrow keys move the
-      // ERG target by 5 W (25 W with Shift). Off while arranging tiles.
+      // ERG target by 5 W (25 W with Shift), or shift gears on a simulated
+      // route. Off while arranging tiles.
       return CallbackShortcuts(
         bindings: _editing
             ? const {}

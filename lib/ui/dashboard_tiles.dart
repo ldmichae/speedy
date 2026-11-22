@@ -344,7 +344,7 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
               ),
               if (grade != null)
                 Tooltip(
-                  message: 'Virtual gear: shift with Zwift shifters '
+                  message: 'Virtual gear: arrow up/down, or Zwift shifters '
                       '(connect them where you connect the trainer).',
                   child: SizedBox(
                       height: 32,
