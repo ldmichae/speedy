@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../devices/trainer.dart';
 import 'heart_rate_controller.dart';
+import 'shifter_controller.dart';
 import 'trainer_controller.dart';
 
 class ConnectView extends ConsumerWidget {
@@ -77,6 +78,70 @@ class ConnectView extends ConsumerWidget {
         const Divider(),
         const SizedBox(height: 16),
         const _HeartRateSection(),
+        const SizedBox(height: 32),
+        const Divider(),
+        const SizedBox(height: 16),
+        const _ShifterSection(),
+      ],
+    );
+  }
+}
+
+/// Optional Zwift Click, Play or Ride for virtual shifting on routes.
+class _ShifterSection extends ConsumerWidget {
+  const _ShifterSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(shifterControllerProvider);
+    final c = ref.read(shifterControllerProvider.notifier);
+    final theme = Theme.of(context);
+    final busy = s.status == TrainerStatus.connecting;
+    final connected = s.status == TrainerStatus.connected;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Zwift shifters (optional)', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          'Pair a Zwift Click, Play or Ride to change virtual gears while a '
+          'route simulates the road. Update its firmware in Zwift Companion '
+          'first, and close Zwift so only this app is connected.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        if (connected)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.settings_input_component),
+            title: Text(s.deviceName ?? 'Zwift shifters'),
+            subtitle: const Text('Connected'),
+            trailing: TextButton(
+                onPressed: c.disconnect, child: const Text('Disconnect')),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: busy || s.scanning ? null : c.scan,
+            icon: const Icon(Icons.settings_input_component),
+            label: Text(busy
+                ? 'Connecting to ${s.deviceName ?? 'shifters'}…'
+                : s.scanning
+                    ? 'Scanning…'
+                    : 'Find Zwift shifters'),
+          ),
+        if (!kIsWeb && !connected && s.scanResults.isNotEmpty)
+          for (final r in s.scanResults)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.settings_input_component),
+              title: Text(r.name),
+              onTap: busy ? null : () => c.connectTo(r),
+            ),
+        if (s.error != null) ...[
+          const SizedBox(height: 8),
+          Text(s.error!, style: TextStyle(color: theme.colorScheme.error)),
+        ],
       ],
     );
   }

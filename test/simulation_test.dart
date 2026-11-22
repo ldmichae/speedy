@@ -30,6 +30,26 @@ void main() {
     expect(simulatedSpeedKph(10, 15), 1.8); // barely moving
   });
 
+  test('momentum: speed builds and fades toward the steady speed', () {
+    double ride(double kph, int watts, double grade, int seconds) {
+      for (var i = 0; i < seconds; i++) {
+        kph = nextSpeedKph(kph, watts, grade, 1);
+      }
+      return kph;
+    }
+
+    // Pedalling from a standstill settles on the steady speed.
+    expect(ride(0, 200, 0, 120), closeTo(simulatedSpeedKph(200, 0), 0.2));
+    // Coasting onto the flat at 40 km/h rolls on, then stops.
+    expect(ride(40, 0, 0, 3), greaterThan(25));
+    expect(ride(40, 0, 0, 600), lessThan(1));
+    // Coasting downhill settles on the descent's terminal speed.
+    expect(ride(0, 0, -5, 120), closeTo(simulatedSpeedKph(0, -5), 0.2));
+    expect(simulatedSpeedKph(0, -5), greaterThan(25));
+    // Too little power for a wall stays put.
+    expect(ride(0, 10, 15, 10), 0);
+  });
+
   test('grades sent to the trainer are clamped', () {
     expect(TrainerSession.clampGrade(40), 15);
     expect(TrainerSession.clampGrade(-40), -10);

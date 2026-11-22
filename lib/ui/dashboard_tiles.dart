@@ -289,6 +289,7 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
     final lock = ref.watch(targetLockProvider);
     final following = lock != null;
     final grade = ref.watch(trainerControllerProvider.select((s) => s.gradePercent));
+    final gear = ref.watch(trainerControllerProvider.select((s) => s.gear));
     final c = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
 
@@ -341,6 +342,17 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
                       )),
                 ),
               ),
+              if (grade != null)
+                Tooltip(
+                  message: 'Virtual gear: shift with Zwift shifters '
+                      '(connect them where you connect the trainer).',
+                  child: SizedBox(
+                      height: 32,
+                      child: Center(
+                          child: Text('Gear $gear',
+                              style: theme.textTheme.labelLarge))),
+                )
+              else
               Tooltip(
                 message: 'Change the step size',
                 child: TextButton(

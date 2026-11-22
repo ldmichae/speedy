@@ -26,6 +26,10 @@ class RideCommands {
       _ref.read(trainerControllerProvider.notifier).adjustTarget(watts);
     }
   }
+
+  /// Shifts the virtual gear by [gears]; does nothing outside SIM mode.
+  void shift(int gears) =>
+      _ref.read(trainerControllerProvider.notifier).shift(gears);
 }
 
 final rideCommandsProvider = Provider(RideCommands.new);

@@ -37,7 +37,8 @@ class SimulatedTrainer implements Trainer {
   void _tick() {
     final target = _target;
     if (_grade != null) {
-      _power = 150; // the rider pedals; the grade changes the speed, not the power
+      _power =
+          150; // the rider pedals; the grade changes the speed, not the power
     } else if (target != null) {
       _power += (target - _power) * 0.25;
     } else {
@@ -100,10 +101,29 @@ double simulatedSpeedKph(int watts, double gradePercent,
       v * (massKg * 9.81 * (gradePercent / 100 + crr) + cw * v * v);
   var lo = 0.0, hi = 30.0; // m/s
   // On a steep enough climb the rider can barely move: floor at walking pace.
-  if (power(0.5) > watts) return 1.8;
+  // Not pedalling on the flat or uphill is standing still.
+  if (power(0.5) > watts) return watts > 0 ? 1.8 : 0;
   for (var i = 0; i < 40; i++) {
     final mid = (lo + hi) / 2;
     power(mid) < watts ? lo = mid : hi = mid;
   }
   return lo * 3.6;
+}
+
+/// Speed (km/h) [seconds] after riding at [kph] with [watts] on
+/// [gradePercent]: the forces of [simulatedSpeedKph] plus the rider's
+/// momentum, so speed builds and fades instead of jumping. Left alone it
+/// settles on [simulatedSpeedKph].
+double nextSpeedKph(double kph, num watts, double gradePercent, double seconds,
+    {double crr = 0.004, double cw = 0.51, double massKg = 85}) {
+  if (seconds <= 0) return kph;
+  final steps = (seconds / 0.25).ceil(); // short steps keep drag stable
+  final dt = seconds / steps;
+  var v = kph / 3.6;
+  for (var i = 0; i < steps; i++) {
+    final drive = watts / max(v, 0.5); // pedal force, finite from a standstill
+    final resist = massKg * 9.81 * (gradePercent / 100 + crr) + cw * v * v;
+    v = max(0, v + (drive - resist) / massKg * dt);
+  }
+  return v * 3.6;
 }
