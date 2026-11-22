@@ -13,6 +13,7 @@ dependencies:
   flutter_map: ^8.3.2
   flutter_riverpod: ^2.6.1
   # Pin to the version pub resolves once it works for you.
+  flutter_scene: ^0.24.3
   http: ^1.6.0
   image: ^4.13.0
   latlong2: ^0.10.1
@@ -21,6 +22,7 @@ dependencies:
   shared_preferences: ^2.5.6
   universal_ble: any
   url_launcher: ^6.3.3
+  vector_math: ^2.4.4
   wakelock_plus: ^1.2.8
   xml: ^7.1.0
 

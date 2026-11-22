@@ -17,6 +17,7 @@ import 'recorder_controller.dart';
 import 'recording_panel.dart';
 import 'trainer_controller.dart';
 import 'ride_commands.dart';
+import 'world_view.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
@@ -84,6 +85,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                   RideView.dashboard => Icons.dashboard_outlined,
                   RideView.map => Icons.map_outlined,
                   RideView.chart => Icons.show_chart,
+                  RideView.world => Icons.landscape_outlined,
                 })),
         ],
         selected: {view},
@@ -206,7 +208,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ],
         );
       } else {
-        // Map or chart over fixed metrics, sized to the window so the page
+        // Map, chart or world over fixed metrics, sized to the window so the page
         // does not scroll. Below a minimum height it scrolls rather than
         // squashing the map.
         final minHeight = 400 + MetricStrip.heightFor(compact);
@@ -221,9 +223,11 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                     children: [
                       ...header,
                       Expanded(
-                          child: view == RideView.map
-                              ? const MapFocus()
-                              : const ChartFocus()),
+                          child: switch (view) {
+                              RideView.world => const WorldFocus(),
+                              RideView.chart => const ChartFocus(),
+                              _ => const MapFocus(),
+                          }),
                       const SizedBox(height: 12),
                       MetricStrip(compact: compact),
                     ])),

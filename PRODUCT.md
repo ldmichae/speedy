@@ -29,7 +29,8 @@ Flutter app (Riverpod, universal_ble). A simulated trainer allows hardware-free 
 - Rearrangeable dashboard layout (in progress)
 - Domain terms live in GLOSSARY.md (not yet written); issues in GitHub ldmichae/speedy
 - Workout plans (ERG, FTP, ramps, repeats); drawn routes and multi-stage tours on an OpenStreetMap map, with elevation, a position dot and a grade simulation mode
-- Undecided: world sim, accounts/sync (none planned)
+- World view: the course as a 3D road (flutter_scene) with Compete ghosts as riders; made-up hills, not real terrain yet
+- Undecided: accounts/sync (none planned)
 
 ## Evidence on Hand
 

@@ -224,8 +224,15 @@ class CompeteController extends Notifier<CompeteRun?> {
   }
 }
 
-/// A rival's gap, and how hard they were working at this point of the race.
-typedef Standing = ({Ghost ghost, GhostGap gap, int? watts, int? bpm});
+/// A rival's gap, how hard they were working at this point of the race, and
+/// where they are on the course (metres).
+typedef Standing = ({
+  Ghost ghost,
+  GhostGap gap,
+  int? watts,
+  int? bpm,
+  double meters,
+});
 
 /// Each rival against the race in progress (none before the start); frozen
 /// at your finish, where a positive gap is how much faster you were.
@@ -247,6 +254,7 @@ final raceStandingsProvider = Provider<List<Standing>>((ref) {
           gap: gapTo(g, elapsed: elapsed, riderMeters: meters),
           watts: watts,
           bpm: bpm,
+          meters: g.distanceAt(elapsed),
         )
   ];
 });
