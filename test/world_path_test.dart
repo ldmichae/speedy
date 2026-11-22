@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -125,5 +126,38 @@ void main() {
       expect(groundAt(50, 5, road, terrain: plane).y, -roadDepth);
       expect(groundAt(50, 90, road, terrain: plane).y, closeTo(50, 1e-9));
     });
+  });
+
+  group('legPose', () {
+    final hip = Vector3(0.12, 0.92, -0.18), bracket = Vector3(0, 0.3, 0);
+
+    test('keeps the leg its length with the foot on the pedal', () {
+      for (var a = 0.0; a < 2 * math.pi; a += 0.3) {
+        final leg = legPose(hip, bracket, 0.17, a, thigh: 0.43, shin: 0.43);
+        expect((leg.knee - hip).length, closeTo(0.43, 1e-6));
+        expect((leg.foot - leg.knee).length, closeTo(0.43, 1e-6));
+        expect(leg.foot.x, hip.x);
+        final pedal = leg.foot - bracket
+          ..x = 0;
+        expect(pedal.length, closeTo(0.17, 1e-6));
+        expect(leg.knee.z, greaterThan(hip.z)); // bends forward
+      }
+    });
+
+    test('the pedal is at the top at 0 and forward at a quarter turn', () {
+      final top = legPose(hip, bracket, 0.17, 0, thigh: 0.43, shin: 0.43);
+      expect(top.foot.y, closeTo(0.47, 1e-6));
+      final fwd =
+          legPose(hip, bracket, 0.17, math.pi / 2, thigh: 0.43, shin: 0.43);
+      expect(fwd.foot.z, closeTo(0.17, 1e-6));
+    });
+  });
+
+  test('MeterFollower reports the speed between readings', () {
+    final f = MeterFollower()
+      ..update(0, 0)
+      ..update(10, 1)
+      ..update(22, 2);
+    expect(f.speed, closeTo(12, 1e-9));
   });
 }

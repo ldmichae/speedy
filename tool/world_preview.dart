@@ -1,5 +1,5 @@
 // Throwaway: shows the World view riding a made-up winding route with
-// two ghosts, no trainer needed. flutter run -t tool/world_preview.dart
+// two ghosts, pedalling at 90 rpm, no trainer needed. flutter run -t tool/world_preview.dart
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -45,6 +45,7 @@ Future<void> main() async {
   double secs() => sw.elapsedMilliseconds / 1000;
   runApp(ProviderScope(
     overrides: [
+      riderCadenceProvider.overrideWithValue(90),
       routeProgressProvider.overrideWith((ref) {
         final t = Timer(const Duration(milliseconds: 500), ref.invalidateSelf);
         ref.onDispose(t.cancel);

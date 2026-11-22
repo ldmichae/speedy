@@ -181,12 +181,35 @@ List<({double x, double y, double z, double size})> treesAround(
   return out;
 }
 
+/// Knee and foot of a leg turning a pedal, in the bike's side plane (y up,
+/// z forward). The foot is on the pedal [crank] metres from [bracket] at
+/// [angle] (radians from straight up, forwards); the hip stays put and the
+/// knee bends forward.
+({Vector3 knee, Vector3 foot}) legPose(
+    Vector3 hip, Vector3 bracket, double crank, double angle,
+    {required double thigh, required double shin}) {
+  final foot = bracket + Vector3(0, math.cos(angle), math.sin(angle)) * crank
+    ..x = hip.x;
+  final d = foot - hip;
+  // A pedal out of reach gets the leg stretched towards it.
+  final len = d.length
+      .clamp((thigh - shin).abs() + 1e-6, thigh + shin - 1e-6)
+      .toDouble();
+  final u = d.normalized();
+  final along = (thigh * thigh - shin * shin + len * len) / (2 * len);
+  final up = math.sqrt(math.max(0, thigh * thigh - along * along));
+  return (knee: hip + u * along + Vector3(0, u.z, -u.y) * up, foot: foot);
+}
+
 /// Turns the distance ridden, which arrives a few times a second, into a
 /// smooth position for every frame: runs at the latest speed and eases out
 /// any error instead of jumping.
 class MeterFollower {
   double _shown = 0, _target = 0, _speed = 0;
   double? _at; // seconds, when [_target] arrived
+
+  /// Metres a second, from the last two readings.
+  double get speed => _speed;
 
   /// A new reading of [meters] at [seconds].
   void update(double meters, double seconds) {

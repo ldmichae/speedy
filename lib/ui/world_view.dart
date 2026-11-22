@@ -13,6 +13,7 @@ import 'compete_screen.dart' show ghostColor;
 import 'elevation_service.dart';
 import 'route_controller.dart';
 import 'route_tile.dart';
+import 'trainer_controller.dart';
 import 'units_controller.dart';
 
 /// The course as a 3D road, with you and your Compete rivals riding it.
@@ -46,19 +47,98 @@ PhysicallyBasedMaterial _matte([vm.Vector4? color]) => PhysicallyBasedMaterial()
   ..metallicFactor = 0
   ..roughnessFactor = 0.9;
 
+/// The rider's cadence (rpm) that their legs turn at; null with no reading.
+/// Overridable so the preview can pedal without a trainer.
+final riderCadenceProvider = Provider<double?>((ref) =>
+    ref.watch(trainerControllerProvider.select((s) => s.latest?.cadenceRpm)));
+
+/// Ghosts record no cadence: they pedal at this while they are moving.
+const _ghostRpm = 85.0;
+
+/// A rider on a bike, facing +z, wheels on y = 0, whose legs turn the
+/// cranks at the cadence given to [pedal].
+class _Bike {
+  _Bike(Color color) {
+    final paint = _matte(_linear(color));
+    final dark = _matte(vm.Vector4(0.02, 0.02, 0.02, 1));
+    final wheel = TorusGeometry(radius: 0.34, tubeRadius: 0.035);
+    final upright = vm.Quaternion.axisAngle(vm.Vector3(0, 0, 1), math.pi / 2);
+    final arm = CuboidGeometry(vm.Vector3(0.03, _crank, 0.03));
+    _cranks = _group([
+      // One arm up on the left, one down on the right, as on a real bike.
+      Node(mesh: Mesh(arm, dark))..position = vm.Vector3(-0.1, _crank / 2, 0),
+      Node(mesh: Mesh(arm, dark))..position = vm.Vector3(0.1, -_crank / 2, 0),
+    ])
+      ..position = _bracket;
+    final segment = CapsuleGeometry(radius: 0.065, height: _limb - 0.13);
+    for (final _ in const [0, 1]) {
+      _legs.add(
+          (Node(mesh: Mesh(segment, dark)), Node(mesh: Mesh(segment, dark))));
+    }
+    root = _group([
+      for (final z in const [-0.5, 0.5])
+        Node(mesh: Mesh(wheel, dark))
+          ..position = vm.Vector3(0, 0.34, z)
+          ..rotation = upright,
+      Node(mesh: Mesh(CuboidGeometry(vm.Vector3(0.06, 0.06, 1.0)), paint))
+        ..position = vm.Vector3(0, 0.6, 0),
+      // Torso leaning over the bars.
+      Node(mesh: Mesh(CapsuleGeometry(radius: 0.17, height: 0.45), paint))
+        ..position = vm.Vector3(0, 1.05, 0.05)
+        ..rotation = vm.Quaternion.axisAngle(vm.Vector3(1, 0, 0), 1.0),
+      Node(mesh: Mesh(SphereGeometry(radius: 0.13), paint))
+        ..position = vm.Vector3(0, 1.32, 0.42),
+      _cranks,
+      for (final (thigh, shin) in _legs) ...[thigh, shin],
+    ]);
+    pedal(0, 0);
+  }
+
+  late final Node root;
+  late final Node _cranks;
+  final _legs = <(Node, Node)>[];
+  double _angle = 0; // left crank, radians from the top, forwards
+
+  static const _crank = 0.17, _limb = 0.43; // metres
+  static final _bracket = vm.Vector3(0, 0.30, 0);
+
+  /// Turns the cranks [dt] seconds' worth at [rpm], legs following.
+  void pedal(double rpm, double dt) {
+    _angle = (_angle + rpm / 60 * 2 * math.pi * dt) % (2 * math.pi);
+    _cranks.rotation = vm.Quaternion.axisAngle(vm.Vector3(1, 0, 0), _angle);
+    for (final (i, (thigh, shin)) in _legs.indexed) {
+      final hip = vm.Vector3(i == 0 ? -0.12 : 0.12, 0.92, -0.18);
+      final leg = legPose(hip, _bracket, _crank, _angle + i * math.pi,
+          thigh: _limb, shin: _limb);
+      _between(thigh, hip, leg.knee);
+      _between(shin, leg.knee, leg.foot);
+    }
+  }
+
+  /// Lays a Y-aligned capsule [node] from [a] to [b] (both at the same x).
+  static void _between(Node node, vm.Vector3 a, vm.Vector3 b) {
+    final d = b - a;
+    node
+      ..position = (a + b) * 0.5
+      ..rotation =
+          vm.Quaternion.axisAngle(vm.Vector3(1, 0, 0), math.atan2(d.z, d.y));
+  }
+}
+
 class _WorldFocusState extends ConsumerState<WorldFocus> {
   final _scene = Scene();
   final _clock = Stopwatch()..start();
   final _me = MeterFollower();
   final _rivals = <MeterFollower>[];
-  final _rivalNodes = <Node>[];
+  final _rivalBikes = <_Bike>[];
+  double _cadence = 0;
   bool _ready = false;
 
   WorldPath? _path;
   (RideCourse, bool)? _builtFor; // the course, and whether it had heights
   Node? _road, _ground;
   vm.Vector2? _groundAt;
-  late final Node _rider = _bike(const Color(0xFF2563EB));
+  late final _rider = _Bike(const Color(0xFF2563EB));
   double _m = 0;
 
   double get _now => _clock.elapsedMicroseconds / 1e6;
@@ -66,6 +146,9 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
   @override
   void initState() {
     super.initState();
+    // Read every frame, so kept here rather than rebuilding the widget.
+    ref.listenManual(riderCadenceProvider, (_, rpm) => _cadence = rpm ?? 0,
+        fireImmediately: true);
     Scene.initializeStaticResources().then((_) {
       if (!mounted) return;
       final (r, g, b) = _sky;
@@ -88,7 +171,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
           fogStart: 150,
           fogEnd: _groundHalf - _regroundAfter - 50,
         )
-        ..add(_rider);
+        ..add(_rider.root);
       setState(() => _ready = true);
     });
   }
@@ -97,31 +180,6 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
   void dispose() {
     _scene.dispose();
     super.dispose();
-  }
-
-  /// A rider on a bike, facing +z, wheels on y = 0.
-  static Node _bike(Color color) {
-    final paint = _matte(_linear(color));
-    final dark = _matte(vm.Vector4(0.02, 0.02, 0.02, 1));
-    final wheel = TorusGeometry(radius: 0.34, tubeRadius: 0.035);
-    final upright = vm.Quaternion.axisAngle(vm.Vector3(0, 0, 1), math.pi / 2);
-    return _group([
-      for (final z in const [-0.5, 0.5])
-        Node(mesh: Mesh(wheel, dark))
-          ..position = vm.Vector3(0, 0.34, z)
-          ..rotation = upright,
-      Node(mesh: Mesh(CuboidGeometry(vm.Vector3(0.06, 0.06, 1.0)), paint))
-        ..position = vm.Vector3(0, 0.6, 0),
-      // Torso leaning over the bars.
-      Node(mesh: Mesh(CapsuleGeometry(radius: 0.17, height: 0.45), paint))
-        ..position = vm.Vector3(0, 1.05, 0.05)
-        ..rotation = vm.Quaternion.axisAngle(vm.Vector3(1, 0, 0), 1.0),
-      Node(mesh: Mesh(SphereGeometry(radius: 0.13), paint))
-        ..position = vm.Vector3(0, 1.32, 0.42),
-      for (final x in const [-0.12, 0.12])
-        Node(mesh: Mesh(CapsuleGeometry(radius: 0.07, height: 0.5), dark))
-          ..position = vm.Vector3(x, 0.72, -0.05),
-    ]);
   }
 
   /// Puts [node] at [m] metres, [lane] metres right of the centre line.
@@ -343,15 +401,15 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
   }
 
   void _syncRivals(List<Standing> standings) {
-    while (_rivalNodes.length > standings.length) {
-      _scene.remove(_rivalNodes.removeLast());
+    while (_rivalBikes.length > standings.length) {
+      _scene.remove(_rivalBikes.removeLast().root);
       _rivals.removeLast();
     }
-    while (_rivalNodes.length < standings.length) {
-      final node = _bike(ghostColor(_rivalNodes.length));
-      _rivalNodes.add(node);
+    while (_rivalBikes.length < standings.length) {
+      final bike = _Bike(ghostColor(_rivalBikes.length));
+      _rivalBikes.add(bike);
       _rivals.add(MeterFollower());
-      _scene.add(node);
+      _scene.add(bike.root);
     }
     for (final (i, s) in standings.indexed) {
       _rivals[i].update(s.meters, _now);
@@ -366,9 +424,12 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     if (path == null) return;
     final now = _now;
     _m = _me.advance(dt, now);
-    _place(_rider, _m, 0);
+    _place(_rider.root, _m, 0);
+    _rider.pedal(_cadence, dt);
     for (final (i, f) in _rivals.indexed) {
-      _place(_rivalNodes[i], f.advance(dt, now), _lane(i));
+      final bike = _rivalBikes[i];
+      _place(bike.root, f.advance(dt, now), _lane(i));
+      bike.pedal(f.speed > 0.5 ? _ghostRpm : 0, dt);
     }
     final at = path.at(_m), g = _groundAt;
     if (g == null || (vm.Vector2(at.x, at.z) - g).length > _regroundAfter) {
