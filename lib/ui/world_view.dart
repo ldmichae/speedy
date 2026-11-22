@@ -8,7 +8,10 @@ import 'package:vector_math/vector_math.dart' as vm;
 
 import '../core/route.dart';
 import '../core/world_path.dart';
+import '../core/dashboard_layout.dart';
 import 'compete_controller.dart';
+import 'dashboard_tiles.dart';
+import 'elevation_chart.dart';
 import 'compete_screen.dart' show ghostColor;
 import 'elevation_service.dart';
 import 'route_controller.dart';
@@ -16,7 +19,9 @@ import 'route_tile.dart';
 import 'trainer_controller.dart';
 import 'units_controller.dart';
 
-/// The course as a 3D road, with you and your Compete rivals riding it.
+/// The course as a 3D road, with you and your Compete rivals riding it, under
+/// a HUD: your numbers top left, the map top right, the climb along the
+/// bottom.
 /// Fills the space it is given. With no course it shows the route tile's
 /// "Choose a route" card.
 class WorldFocus extends ConsumerStatefulWidget {
@@ -465,40 +470,108 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     _syncCourse(progress);
     _syncRivals(standings);
 
+    final surface = Theme.of(context).colorScheme.surface;
+    final profile = progress.course.stage(progress.stage).elevation;
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: Stack(children: [
-        Positioned.fill(
-          child: SceneView(_scene,
-              cameraBuilder: _camera, onTick: _tick, maxFrameRate: 60),
-        ),
-        Positioned(
-          top: 8,
-          left: 8,
-          right: 8,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .surface
-                    .withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Text(
-                    RouteMapTile.label(progress, ref.watch(rideUnitsProvider)),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
+      child: LayoutBuilder(builder: (context, box) {
+        const pad = 8.0, gap = 6.0, profileHeight = 84.0;
+        final bottom = profile == null ? pad : profileHeight + 2 * pad;
+        // Metrics fill the height above the profile, within reason: 5.75
+        // units of rows (power 1.5, three rows of two 1, ERG 1.25).
+        final unit =
+            ((box.maxHeight - bottom - pad - 4 * gap) / 5.75).clamp(40.0, 72.0);
+        Widget tile(TileKind k, double units) =>
+            SizedBox(height: unit * units, child: DashboardTile(kind: k));
+        Widget pair(TileKind a, TileKind b) => Row(children: [
+              Expanded(child: tile(a, 1)),
+              const SizedBox(width: gap),
+              Expanded(child: tile(b, 1)),
+            ]);
+        // Narrow: no room for the map beside the metrics; its label stays.
+        final showMap = box.maxWidth >= 640;
+        return Stack(children: [
+          Positioned.fill(
+            child: SceneView(_scene,
+                cameraBuilder: _camera, onTick: _tick, maxFrameRate: 60),
+          ),
+          Positioned(
+            top: pad,
+            left: pad,
+            width: (box.maxWidth * 0.24).clamp(190.0, 280.0),
+            child: Column(children: [
+              for (final (i, row) in [
+                tile(TileKind.powerAvg, 1.5),
+                pair(TileKind.cadence, TileKind.speed),
+                pair(TileKind.heartRate, TileKind.distance),
+                pair(TileKind.time, TileKind.energy),
+                tile(TileKind.ergTarget, 1.25),
+              ].indexed) ...[
+                if (i > 0) const SizedBox(height: gap),
+                row,
+              ],
+            ]),
+          ),
+          if (showMap)
+            Positioned(
+              top: pad,
+              right: pad,
+              width: (box.maxWidth * 0.3).clamp(220.0, 380.0),
+              height: (box.maxHeight * 0.4).clamp(160.0, 300.0),
+              child: const RouteMapTile(elevation: MapElevation.none),
+            )
+          else
+            Positioned(
+              top: pad,
+              right: pad,
+              width: box.maxWidth * 0.4,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: surface.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Text(
+                        RouteMapTile.label(
+                            progress, ref.watch(rideUnitsProvider)),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ]),
+          if (profile != null)
+            Positioned(
+              left: pad,
+              right: pad,
+              bottom: pad,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: surface.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  // You, and the ghosts in their race colours, on the stage.
+                  child: ElevationChart(
+                    profile: profile,
+                    height: profileHeight,
+                    riderMeters: progress.stageMeters,
+                    markers: [
+                      for (final (i, s) in standings.indexed)
+                        (s.meters, ghostColor(i)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ]);
+      }),
     );
   }
 }

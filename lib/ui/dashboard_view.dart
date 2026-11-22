@@ -208,10 +208,11 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ],
         );
       } else {
-        // Map, chart or world over fixed metrics, sized to the window so the page
+        // Map or chart over fixed metrics, sized to the window so the page
         // does not scroll. Below a minimum height it scrolls rather than
-        // squashing the map.
-        final minHeight = 400 + MetricStrip.heightFor(compact);
+        // squashing the map. The world has its metrics on its own HUD.
+        final strip = view != RideView.world;
+        final minHeight = 400 + (strip ? MetricStrip.heightFor(compact) : 0.0);
         content = SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: SizedBox(
@@ -228,8 +229,10 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                               RideView.chart => const ChartFocus(),
                               _ => const MapFocus(),
                           }),
-                      const SizedBox(height: 12),
-                      MetricStrip(compact: compact),
+                      if (strip) ...[
+                        const SizedBox(height: 12),
+                        MetricStrip(compact: compact),
+                      ],
                     ])),
               ),
             ]),
