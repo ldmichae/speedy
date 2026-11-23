@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:latlong2/latlong.dart';
@@ -105,7 +106,8 @@ class TerrainTileElevation extends ElevationSource {
     var bytes = await _cache.read(key);
     final fresh = bytes == null;
     bytes ??= await fetch(z, x, y);
-    final tile = TerrainTile.fromPng(bytes); // validates before it is cached
+    // Off the UI thread: decoding a tile takes long enough to drop frames.
+    final tile = await compute(_decodeTile, bytes); // validates before caching
     if (fresh) await _cache.write(key, bytes);
     _decoded[key] = tile;
     while (_decoded.length > maxDecoded) {
@@ -141,3 +143,5 @@ class TerrainTileElevation extends ElevationSource {
     return out;
   }
 }
+
+TerrainTile _decodeTile(Uint8List bytes) => TerrainTile.fromPng(bytes);

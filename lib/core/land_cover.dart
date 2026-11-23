@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -296,14 +297,15 @@ class LandCoverSource {
     final hit = await _cache.read(key);
     if (hit != null) {
       try {
-        return parseOverpass(utf8.decode(hit));
+        return await compute(parseOverpass, utf8.decode(hit));
       } on FormatException {
         // A damaged file: fetch it again.
       }
     }
     final s = i * cellDegrees, w = k * cellDegrees;
     final body = await fetch(query(s, w, s + cellDegrees, w + cellDegrees));
-    final cover = parseOverpass(body); // validates before it is cached
+    // Parsed off the UI thread: a town's reply is megabytes of JSON.
+    final cover = await compute(parseOverpass, body); // validates first
     await _cache.write(key, Uint8List.fromList(utf8.encode(body)));
     return cover;
   }
