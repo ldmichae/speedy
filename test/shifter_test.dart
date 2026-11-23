@@ -36,38 +36,46 @@ void main() {
   group('parseZwiftShift', () {
     test('Click: plus is up, minus is down, 1 is released', () {
       expect(parseZwiftShift(bytes([0x37, 0x08, 0x00, 0x10, 0x01])),
-          (up: true, down: false));
+          (up: true, down: false, light: false));
       expect(parseZwiftShift(bytes([0x37, 0x08, 0x01, 0x10, 0x00])),
-          (up: false, down: true));
+          (up: false, down: true, light: false));
       expect(parseZwiftShift(bytes([0x37, 0x08, 0x01, 0x10, 0x01])),
-          (up: false, down: false));
+          (up: false, down: false, light: false));
     });
 
     test('Play: right shoulder is up, left shoulder is down', () {
       expect(parseZwiftShift(bytes([0x07, 0x08, 0x00, 0x30, 0x00])),
-          (up: true, down: false));
+          (up: true, down: false, light: false));
       expect(parseZwiftShift(bytes([0x07, 0x08, 0x01, 0x30, 0x00])),
-          (up: false, down: true));
+          (up: false, down: true, light: false));
       expect(parseZwiftShift(bytes([0x07, 0x08, 0x00, 0x30, 0x01])),
-          (up: false, down: false));
+          (up: false, down: false, light: false));
     });
 
     test('Ride: right side harder, left side easier, skipping analog fields',
         () {
-      expect(parseZwiftShift(ride(0)), (up: false, down: false));
-      expect(parseZwiftShift(ride(0x1000)), (up: true, down: false));
-      expect(parseZwiftShift(ride(0x2000)), (up: true, down: false));
-      expect(parseZwiftShift(ride(0x0100)), (up: false, down: true));
-      expect(parseZwiftShift(ride(0x0200)), (up: false, down: true));
-      // Power-up and other buttons are not shifts.
-      expect(parseZwiftShift(ride(0x0400)), (up: false, down: false));
+      expect(parseZwiftShift(ride(0)), (up: false, down: false, light: false));
+      expect(
+          parseZwiftShift(ride(0x1000)), (up: true, down: false, light: false));
+      expect(
+          parseZwiftShift(ride(0x2000)), (up: true, down: false, light: false));
+      expect(
+          parseZwiftShift(ride(0x0100)), (up: false, down: true, light: false));
+      expect(
+          parseZwiftShift(ride(0x0200)), (up: false, down: true, light: false));
+      // Power-up and the other buttons switch the headlight; on/off does not.
+      for (final b in [0x0400, 0x4000, 0x0001, 0x0080]) {
+        expect(parseZwiftShift(ride(b)), (up: false, down: false, light: true));
+      }
+      expect(parseZwiftShift(ride(0x0800)),
+          (up: false, down: false, light: false));
     });
 
     test('Click v2, as captured from one', () {
       expect(parseZwiftShift(bytes([0x23, 0x08, 0xff, 0xdf, 0xff, 0xff, 0x0f])),
-          (up: true, down: false)); // harder
+          (up: true, down: false, light: false)); // harder
       expect(parseZwiftShift(bytes([0x23, 0x08, 0xff, 0xfd, 0xff, 0xff, 0x0f])),
-          (up: false, down: true)); // easier
+          (up: false, down: true, light: false)); // easier
     });
 
     test('battery, keep-alive and truncated packets are ignored', () {

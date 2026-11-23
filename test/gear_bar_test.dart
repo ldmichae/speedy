@@ -6,7 +6,7 @@ import 'package:indoor_cycling/devices/ble/ble_transport.dart';
 import 'package:indoor_cycling/ui/dashboard_tiles.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 import 'package:indoor_cycling/ui/world_view.dart'
-    show worldGearExpandedProvider;
+    show worldGearExpandedProvider, worldJustRideProvider;
 
 import 'fakes/in_memory_ble_transport.dart';
 
@@ -59,5 +59,13 @@ void main() {
     expect(c.read(worldGearExpandedProvider), isFalse);
     c.read(worldGearExpandedProvider.notifier).toggle();
     expect(c.read(worldGearExpandedProvider), isTrue);
+  });
+
+  test('Just ride starts off and toggles', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    expect(c.read(worldJustRideProvider), isFalse);
+    c.read(worldJustRideProvider.notifier).toggle();
+    expect(c.read(worldJustRideProvider), isTrue);
   });
 }

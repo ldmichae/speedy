@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'headlight_controller.dart';
 import 'navigation.dart';
 import 'recorder_controller.dart';
 import 'ride_session.dart';
@@ -26,6 +27,9 @@ class RideCommands {
       _ref.read(trainerControllerProvider.notifier).adjustTarget(watts);
     }
   }
+
+  /// Switches the World view's bike headlight on or off.
+  void toggleHeadlight() => _ref.read(headlightProvider.notifier).toggle();
 
   /// Shifts the virtual gear by [gears]; does nothing outside SIM mode.
   void shift(int gears) =>

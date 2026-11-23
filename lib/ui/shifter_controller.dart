@@ -46,12 +46,14 @@ class ShifterState {
 }
 
 /// A Zwift Click, Play or Ride. Its shift buttons do what the arrow keys do
-/// (see [RideCommands.nudge]): a virtual gear on the road, 5 W in ERG.
+/// (see [RideCommands.nudge]): a virtual gear on the road, 5 W in ERG. On a
+/// Ride or Click v2 its other buttons switch the headlight.
 class ShifterController extends Notifier<ShifterState> {
   DeviceScanner? _scanner;
   String? _deviceId;
   StreamSubscription<Object?>? _buttonSub, _syncSub, _connSub;
-  bool _up = false, _down = false; // held at the last notification
+  // Held at the last notification.
+  bool _up = false, _down = false, _light = false;
 
   BleTransport get _transport => ref.read(bleTransportProvider);
   DeviceScanner get _scan => _scanner ??= DeviceScanner(_transport);
@@ -131,8 +133,10 @@ class ShifterController extends Notifier<ShifterState> {
     // Like the arrow keys: a gear on the road, 5 W in ERG.
     if (p.up && !_up) commands.nudge(5);
     if (p.down && !_down) commands.nudge(-5);
+    if (p.light && !_light) commands.toggleHeadlight();
     _up = p.up;
     _down = p.down;
+    _light = p.light;
   }
 
   Future<void> disconnect() async {
@@ -145,7 +149,7 @@ class ShifterController extends Notifier<ShifterState> {
     await _syncSub?.cancel();
     await _connSub?.cancel();
     _buttonSub = _syncSub = _connSub = null;
-    _up = _down = false;
+    _up = _down = _light = false;
     final id = _deviceId;
     _deviceId = null;
     if (id != null) {

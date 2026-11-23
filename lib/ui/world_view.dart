@@ -17,11 +17,13 @@ import '../core/terrain_cache.dart';
 import '../core/world_build.dart';
 import '../core/world_path.dart';
 import '../core/dashboard_layout.dart';
+import '../core/daylight.dart';
 import 'compete_controller.dart';
 import 'dashboard_tiles.dart';
 import 'elevation_chart.dart';
 import 'compete_screen.dart' show ghostColor;
 import 'elevation_service.dart';
+import 'headlight_controller.dart';
 import 'route_controller.dart';
 import 'route_tile.dart';
 import 'trainer_controller.dart';
@@ -41,7 +43,6 @@ class WorldFocus extends ConsumerStatefulWidget {
 
 /// Metres the rider goes from the middle of the ground before it is rebuilt.
 const _regroundAfter = 300.0;
-const _sky = (0.55, 0.70, 0.88); // horizon colour, also the fog
 
 /// A Flutter colour as the engine's linear RGBA.
 vm.Vector4 _linear(Color c) => vm.Vector4(math.pow(c.r, 2.2).toDouble(),
@@ -136,14 +137,14 @@ class _WorldLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (r, g, b) = _sky;
+    final sky = Daylight.at(DateTime.now()).horizon;
     return ColoredBox(
       // The sky's horizon, so the reveal does not flash.
       color: Color.fromARGB(
           255,
-          (math.pow(r, 1 / 2.2) * 255).round(),
-          (math.pow(g, 1 / 2.2) * 255).round(),
-          (math.pow(b, 1 / 2.2) * 255).round()),
+          (math.pow(sky.r, 1 / 2.2) * 255).round(),
+          (math.pow(sky.g, 1 / 2.2) * 255).round(),
+          (math.pow(sky.b, 1 / 2.2) * 255).round()),
       child: Center(
         child: Card(
           child: Padding(
@@ -180,6 +181,72 @@ class WorldGearExpanded extends PersistedNotifier<bool> {
   Future<void> write(SharedPreferences p, bool v) => p.setBool(_key, v);
 
   void toggle() => put(!state);
+}
+
+/// Just ride: the World view hides its numbers, map and climb, leaving only
+/// the road and your gear. Remembered between rides.
+final worldJustRideProvider =
+    NotifierProvider<WorldJustRide, bool>(WorldJustRide.new);
+
+class WorldJustRide extends PersistedNotifier<bool> {
+  static const _key = 'worldJustRide';
+
+  @override
+  bool get defaults => false;
+
+  @override
+  bool? read(SharedPreferences p) => p.getBool(_key);
+
+  @override
+  Future<void> write(SharedPreferences p, bool v) => p.setBool(_key, v);
+
+  void toggle() => put(!state);
+}
+
+/// Switches Just ride on and off.
+class _JustRideButton extends ConsumerWidget {
+  const _JustRideButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(worldJustRideProvider);
+    return IconButton(
+      key: const Key('justRide'),
+      tooltip: on ? 'Show numbers' : 'Just ride',
+      isSelected: on,
+      onPressed: ref.read(worldJustRideProvider.notifier).toggle,
+      style: IconButton.styleFrom(
+        backgroundColor:
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+      ),
+      icon: const Icon(Icons.fullscreen),
+      selectedIcon: const Icon(Icons.fullscreen_exit),
+    );
+  }
+}
+
+/// Switches your bike's headlight; a Zwift Ride or Click v2 can too.
+class _HeadlightButton extends ConsumerWidget {
+  const _HeadlightButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(headlightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      key: const Key('headlight'),
+      tooltip: on ? 'Headlight off' : 'Headlight on',
+      isSelected: on,
+      onPressed: ref.read(headlightProvider.notifier).toggle,
+      style: IconButton.styleFrom(
+        backgroundColor: on
+            ? scheme.primaryContainer
+            : scheme.surface.withValues(alpha: 0.9),
+      ),
+      icon: const Icon(Icons.flashlight_off_outlined),
+      selectedIcon: const Icon(Icons.flashlight_on),
+    );
+  }
 }
 
 /// Your virtual gear in the bottom-right corner, big enough to read
@@ -408,30 +475,71 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     // Read every frame, so kept here rather than rebuilding the widget.
     ref.listenManual(riderCadenceProvider, (_, rpm) => _cadence = rpm ?? 0,
         fireImmediately: true);
+    // Added only while on, so a rider who never uses it never compiles the
+    // spot-light shader (shader compiles have frozen Windows before).
+    ref.listenManual(headlightProvider, (_, on) {
+      final lit = _rider.root.children.contains(_headlight);
+      if (on && !lit) _rider.root.add(_headlight);
+      if (!on && lit) _rider.root.remove(_headlight);
+    }, fireImmediately: true);
     Scene.initializeStaticResources().then((_) {
       if (!mounted) return;
-      final (r, g, b) = _sky;
       _scene
-        ..skybox = Skybox(GradientSkySource(
-            horizonColor: vm.Vector3(r, g, b),
-            zenithColor: vm.Vector3(0.12, 0.32, 0.70)))
+        ..skybox = Skybox(_skySource = GradientSkySource())
         // No cast shadows or ambient occlusion: their shaders took ~10 s to
         // compile on Windows (OpenGL), every launch, freezing the app. The
         // riders get contact shadows instead (see _Bike).
-        ..directionalLight = DirectionalLight(
-            direction: vm.Vector3(-0.4, -1, -0.3), intensity: 3)
+        ..directionalLight = DirectionalLight()
         ..environmentSettings = EnvironmentSettings(
           toneMapping: ToneMappingMode.aces,
           // Hides the edge of the ground built around the rider.
           fogEnabled: true,
           fogMode: FogMode.linear,
-          fogColor: vm.Vector3(r, g, b),
           fogStart: 150,
           fogEnd: groundHalf - _regroundAfter - 50,
         )
         ..add(_rider.root);
+      _applyDaylight();
       setState(() => _ready = true);
     });
+  }
+
+  /// A warm beam from your handlebars down the road; bright enough to matter
+  /// only at dusk and night.
+  late final _headlight = Node()
+    ..position = vm.Vector3(0, 1.0, 0.6)
+    ..addComponent(SpotLightComponent(SpotLight(
+      color: vm.Vector3(1, 0.93, 0.8),
+      intensity: 150,
+      range: 45,
+      direction: vm.Vector3(0, -0.12, 1),
+      innerConeAngle: 0.22,
+      outerConeAngle: 0.45,
+    )));
+
+  late GradientSkySource _skySource;
+  int? _daylightMinute;
+
+  /// Sets the sky, sun and fog for the time on the device clock, once a
+  /// minute.
+  void _applyDaylight() {
+    final now = DateTime.now();
+    if (now.minute == _daylightMinute) return;
+    _daylightMinute = now.minute;
+    final d = Daylight.at(now);
+    _skySource
+      ..horizonColor = d.horizon
+      ..zenithColor = d.zenith
+      ..groundColor = d.horizon * 0.3
+      ..sunDirection = d.toSun
+      // No sun disc below the horizon.
+      ..sunColor = vm.Vector3(3, 2.7, 2.2) * (d.sunHeight > 0 ? 1.0 : 0.0);
+    _scene.directionalLight!
+      ..direction = d.lightDirection
+      ..color = d.lightColor
+      ..intensity = d.lightIntensity;
+    _scene.environmentIntensity = d.ambient;
+    _scene.fog.color.setFrom(d.horizon);
   }
 
   @override
@@ -626,6 +734,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
   void _tick(Duration _, double dt) {
     final path = _path;
     if (path == null || !_built) return;
+    _applyDaylight();
     final now = _now;
     _m = _me.advance(dt, now);
     _place(_rider.root, _m, 0);
@@ -661,6 +770,7 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
       if (p != null) _me.update(p.meters, _now);
     });
     final standings = ref.watch(raceStandingsProvider);
+    final justRide = ref.watch(worldJustRideProvider);
     if (progress == null) return const RouteMapTile();
 
     if (_path == null) _me.update(progress.meters, _now);
@@ -678,7 +788,8 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
       clipBehavior: Clip.antiAlias,
       child: LayoutBuilder(builder: (context, box) {
         const pad = 8.0, gap = 6.0, profileHeight = 84.0;
-        final bottom = profile == null ? pad : profileHeight + 2 * pad;
+        final bottom =
+            profile == null || justRide ? pad : profileHeight + 2 * pad;
         // Metrics fill the height above the profile, within reason: 5.75
         // units of rows (power 1.5, three rows of two 1, ERG 1.25).
         final unit =
@@ -713,89 +824,102 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
             Positioned(
               right: pad,
               bottom: bottom,
-              child: const _GearReadout(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (!justRide) const _HeadlightButton(),
+                    const _JustRideButton(),
+                  ]),
+                  const SizedBox(height: 8),
+                  const _GearReadout(),
+                ],
+              ),
             ),
-          if (_ready && _built && _sceneryLoading)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: bottom + pad,
-              child: const Center(child: _SceneryChip()),
-            ),
-          Positioned(
-            top: pad,
-            left: pad,
-            width: (box.maxWidth * 0.24).clamp(190.0, 280.0),
-            child: Column(children: [
-              for (final (i, row) in [
-                tile(TileKind.powerAvg, 1.5),
-                pair(TileKind.cadence, TileKind.speed),
-                pair(TileKind.heartRate, TileKind.distance),
-                pair(TileKind.time, TileKind.energy),
-                tile(TileKind.ergTarget, 1.25),
-              ].indexed) ...[
-                if (i > 0) const SizedBox(height: gap),
-                row,
-              ],
-            ]),
-          ),
-          if (showMap)
+          // Just ride: only the gear readout stays.
+          if (!justRide) ...[
+            if (_ready && _built && _sceneryLoading)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: bottom + pad,
+                child: const Center(child: _SceneryChip()),
+              ),
             Positioned(
               top: pad,
-              right: pad,
-              width: (box.maxWidth * 0.3).clamp(220.0, 380.0),
-              height: (box.maxHeight * 0.4).clamp(160.0, 300.0),
-              child: const RouteMapTile(elevation: MapElevation.none),
-            )
-          else
-            Positioned(
-              top: pad,
-              right: pad,
-              width: box.maxWidth * 0.4,
-              child: Align(
-                alignment: Alignment.centerRight,
+              left: pad,
+              width: (box.maxWidth * 0.24).clamp(190.0, 280.0),
+              child: Column(children: [
+                for (final (i, row) in [
+                  tile(TileKind.powerAvg, 1.5),
+                  pair(TileKind.cadence, TileKind.speed),
+                  pair(TileKind.heartRate, TileKind.distance),
+                  pair(TileKind.time, TileKind.energy),
+                  tile(TileKind.ergTarget, 1.25),
+                ].indexed) ...[
+                  if (i > 0) const SizedBox(height: gap),
+                  row,
+                ],
+              ]),
+            ),
+            if (showMap)
+              Positioned(
+                top: pad,
+                right: pad,
+                width: (box.maxWidth * 0.3).clamp(220.0, 380.0),
+                height: (box.maxHeight * 0.4).clamp(160.0, 300.0),
+                child: const RouteMapTile(elevation: MapElevation.none),
+              )
+            else
+              Positioned(
+                top: pad,
+                right: pad,
+                width: box.maxWidth * 0.4,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: surface.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Text(
+                          RouteMapTile.label(
+                              progress, ref.watch(rideUnitsProvider)),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ),
+              ),
+            if (profile != null)
+              Positioned(
+                left: pad,
+                right: pad,
+                bottom: pad,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: surface.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(999),
+                    color: surface.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Text(
-                        RouteMapTile.label(
-                            progress, ref.watch(rideUnitsProvider)),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    // You, and the ghosts in their race colours, on the stage.
+                    child: ElevationChart(
+                      profile: profile,
+                      height: profileHeight,
+                      riderMeters: progress.stageMeters,
+                      markers: [
+                        for (final (i, s) in standings.indexed)
+                          (s.meters, ghostColor(i)),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          if (profile != null)
-            Positioned(
-              left: pad,
-              right: pad,
-              bottom: pad,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: surface.withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  // You, and the ghosts in their race colours, on the stage.
-                  child: ElevationChart(
-                    profile: profile,
-                    height: profileHeight,
-                    riderMeters: progress.stageMeters,
-                    markers: [
-                      for (final (i, s) in standings.indexed)
-                        (s.meters, ghostColor(i)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          ],
         ]);
       }),
     );
