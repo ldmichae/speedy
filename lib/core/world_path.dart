@@ -53,6 +53,17 @@ class WorldPath {
       _origin.longitude +
           x / (_r * math.cos(_origin.latitudeInRad)) * radians2Degrees);
 
+  /// Local x (east) and z (north) metres of [p]; the inverse of [latLngOf].
+  (double, double) localOf(LatLng p) => (
+        _r *
+            (p.longitudeInRad - _origin.longitudeInRad) *
+            math.cos(_origin.latitudeInRad),
+        _r * (p.latitudeInRad - _origin.latitudeInRad),
+      );
+
+  /// Where on Earth the course starts.
+  LatLng get origin => _origin;
+
   /// The road centre after riding [m] metres, clamped to the ends.
   Vector3 at(double m) {
     final f = (m / step).clamp(0.0, points.length - 1.0);
@@ -197,24 +208,33 @@ class HeightGrid {
 const roadDepth = 0.4;
 
 /// Where trees stand in the square of half-size [half] around ([cx], [cz]):
-/// one chance per 25 m cell, the same trees every time a cell is built, and
-/// none within 12 m of the road. They stand on [groundAt] with [terrain].
-List<({double x, double y, double z, double size})> treesAround(
+/// at most one per 12.5 m cell, kept with probability [chance] there (by
+/// default a sprinkling), the same trees every time a cell is built, none
+/// within 12 m of the road. They stand on [groundAt] with [terrain]; [r] is
+/// a random 0..1 of their own, for choosing what kind of tree.
+List<({double x, double y, double z, double size, double r})> treesAround(
     double cx, double cz, double half, List<Vector3> road,
-    {HeightGrid? terrain}) {
-  const cell = 25.0;
-  final out = <({double x, double y, double z, double size})>[];
+    {HeightGrid? terrain, double Function(double x, double z)? chance}) {
+  const cell = 12.5;
+  final out = <({double x, double y, double z, double size, double r})>[];
   final i0 = ((cx - half) / cell).floor(), i1 = ((cx + half) / cell).floor();
   final j0 = ((cz - half) / cell).floor(), j1 = ((cz + half) / cell).floor();
   for (var i = i0; i <= i1; i++) {
     for (var j = j0; j <= j1; j++) {
       final rng = math.Random(i * 73856093 ^ j * 19349663);
-      if (rng.nextDouble() > 0.35) continue;
+      final roll = rng.nextDouble();
       final x = (i + rng.nextDouble()) * cell,
           z = (j + rng.nextDouble()) * cell;
+      if (roll > (chance?.call(x, z) ?? 0.09)) continue;
       final g = groundAt(x, z, road, terrain: terrain);
       if (g.road < 12) continue;
-      out.add((x: x, y: g.y, z: z, size: 0.7 + rng.nextDouble() * 0.8));
+      out.add((
+        x: x,
+        y: g.y,
+        z: z,
+        size: 0.7 + rng.nextDouble() * 0.8,
+        r: rng.nextDouble()
+      ));
     }
   }
   return out;

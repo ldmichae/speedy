@@ -1,12 +1,18 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_scene/scene.dart';
+import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:vector_math/vector_math.dart' as vm;
 
+import '../core/land_cover.dart';
+import '../core/region_style.dart';
 import '../core/route.dart';
+import '../core/terrain_cache.dart';
 import '../core/world_path.dart';
 import '../core/dashboard_layout.dart';
 import 'compete_controller.dart';
@@ -56,6 +62,70 @@ PhysicallyBasedMaterial _matte([vm.Vector4? color]) => PhysicallyBasedMaterial()
 /// Overridable so the preview can pedal without a trainer.
 final riderCadenceProvider = Provider<double?>((ref) =>
     ref.watch(trainerControllerProvider.select((s) => s.latest?.cadenceRpm)));
+
+/// OpenStreetMap land cover for the World view's scenery, each ~2 km cell
+/// fetched once and kept on disk. Null on web, which has no real terrain
+/// to put it on.
+final landCoverProvider = Provider<LandCoverSource?>((ref) {
+  if (kIsWeb) return null;
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return LandCoverSource(
+      fetch: httpOverpassFetcher(client),
+      cache: createTerrainCache(folder: 'landcover', extension: 'json'));
+});
+
+/// The trees of one ground square: one instanced mesh per part, so a
+/// forest is a handful of draw calls.
+class _Trees {
+  final _bark = _matte(vm.Vector4(0.12, 0.07, 0.03, 1));
+  final _leaf = _matte(); // tinted per tree
+  late final trunks = InstancedMesh(
+      geometry: CylinderGeometry(bottomRadius: 0.25, topRadius: 0.2, height: 2),
+      material: _bark);
+  late final palmTrunks = InstancedMesh(
+      geometry:
+          CylinderGeometry(bottomRadius: 0.16, topRadius: 0.12, height: 7),
+      material: _bark);
+  late final cones = InstancedMesh(
+      geometry: CylinderGeometry(bottomRadius: 2.2, topRadius: 0, height: 6),
+      material: _leaf);
+  late final balls = InstancedMesh(
+      geometry: SphereGeometry(radius: 1, segments: 12, rings: 8),
+      material: _leaf);
+
+  /// A [kind] of tree on the ground at ([x], [y], [z]), [size] times the
+  /// usual, its green varied by [r] (0..1).
+  void add(TreeKind kind, double x, double y, double z, double size, double r) {
+    vm.Matrix4 at(double up, vm.Vector3 scale) =>
+        vm.Matrix4.translation(vm.Vector3(x, y + up * size, z))
+          ..scaleByVector3(scale * size);
+    final one = vm.Vector3.all(1);
+    switch (kind) {
+      case TreeKind.conifer:
+        trunks.addInstance(at(1, one));
+        cones.addInstance(at(4.5, one),
+            color: vm.Vector4(0.03, 0.10 + 0.04 * r, 0.03, 1));
+      case TreeKind.broadleaf:
+        trunks.addInstance(at(1.2, vm.Vector3(1, 1.2, 1)));
+        balls.addInstance(at(4.2, vm.Vector3(2.4, 2.1, 2.4)),
+            color: vm.Vector4(0.05 + 0.05 * r, 0.15 + 0.03 * r, 0.03, 1));
+      case TreeKind.palm:
+        palmTrunks.addInstance(at(3.5, one));
+        balls.addInstance(at(7, vm.Vector3(2.6, 0.6, 2.6)),
+            color: vm.Vector4(0.09, 0.20, 0.04, 1));
+      case TreeKind.bush:
+        balls.addInstance(at(0.6, vm.Vector3(1.3, 0.9, 1.3)),
+            color: vm.Vector4(0.07 + 0.03 * r, 0.13, 0.04, 1));
+    }
+  }
+
+  List<Node> nodes() => [
+        for (final m in [trunks, palmTrunks, cones, balls])
+          if (m.instanceCount > 0)
+            Node()..addComponent(InstancedMeshComponent(m)),
+      ];
+}
 
 /// Ghosts record no cadence: they pedal at this while they are moving.
 const _ghostRpm = 85.0;
@@ -294,16 +364,21 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
 
   static const _n = (2 * _groundHalf) ~/ _groundCell + 1; // posts a side
 
-  /// New ground around ([cx], [cz]) on the real terrain where it can be
-  /// read. The old ground stays until the heights arrive; with none yet,
-  /// made-up hills go down at once so the road is never in mid-air.
+  /// New ground around ([cx], [cz]) on the real terrain, dressed for the
+  /// region with what OpenStreetMap says is there, where it can be read.
+  /// The old ground stays until that arrives; with none yet, made-up hills
+  /// go down at once so the road is never in mid-air.
   Future<void> _reground(double cx, double cz) async {
     _groundAt = vm.Vector2(cx, cz);
     final gen = ++_groundGen;
-    if (_ground == null) _buildGround(cx, cz, null);
+    if (_ground == null) _buildGround(cx, cz, null, null);
     final terrain = await _terrainAround(cx, cz);
+    // Only a real place has land cover: not a Compete course out at sea.
+    final cover = terrain == null ? null : await _coverAround(cx, cz);
     if (!mounted || gen != _groundGen) return; // moved on meanwhile
-    if (terrain != null || _ground == null) _buildGround(cx, cz, terrain);
+    if (terrain != null || _ground == null) {
+      _buildGround(cx, cz, terrain, cover);
+    }
   }
 
   int _groundGen = 0;
@@ -329,9 +404,81 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
     }
   }
 
-  /// Ground and trees in a square around ([cx], [cz]), replacing the last.
-  void _buildGround(double cx, double cz, HeightGrid? terrain) {
-    final road = _path!.near(cx, cz, _groundHalf + 150);
+  /// What OpenStreetMap has on the ground square, or null where it cannot
+  /// be had (web, offline, the service busy): then it is generic country.
+  Future<LandCover?> _coverAround(double cx, double cz) async {
+    final source = ref.read(landCoverProvider);
+    final path = _path;
+    if (source == null || path == null) return null;
+    final sw = path.latLngOf(cx - _groundHalf, cz - _groundHalf);
+    final ne = path.latLngOf(cx + _groundHalf, cz + _groundHalf);
+    try {
+      return await source.around(
+          sw.latitude, sw.longitude, ne.latitude, ne.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// [items]' outlines in local metres, keeping those that reach the square
+  /// of half-size [half] around ([cx], [cz]).
+  LocalShapes<T> _local<T>(Iterable<T> items, List<LatLng> Function(T) ring,
+      double cx, double cz, double half) {
+    final path = _path!;
+    final kept = <T>[];
+    final xs = <List<double>>[], zs = <List<double>>[];
+    for (final item in items) {
+      final x = <double>[], z = <double>[];
+      for (final p in ring(item)) {
+        final (px, pz) = path.localOf(p);
+        x.add(px);
+        z.add(pz);
+      }
+      if (x.reduce(math.max) < cx - half || x.reduce(math.min) > cx + half) {
+        continue;
+      }
+      if (z.reduce(math.max) < cz - half || z.reduce(math.min) > cz + half) {
+        continue;
+      }
+      kept.add(item);
+      xs.add(x);
+      zs.add(z);
+    }
+    return LocalShapes(kept, xs, zs);
+  }
+
+  /// Trees per 12.5 m cell on each cover (scrub grows bushes).
+  static double _treeDensity(Cover c) => switch (c) {
+        Cover.forest => 0.9,
+        Cover.scrub => 0.5,
+        Cover.urban => 0.06,
+        Cover.grass || Cover.wetland => 0.05,
+        Cover.farmland => 0.01,
+        Cover.water || Cover.sand || Cover.rock || Cover.snow => 0,
+      };
+
+  /// A random 0..1 that is the same everywhere within one [size] m square.
+  static double _patch(double x, double z, double size) =>
+      math.Random((x / size).floor() * 73856093 ^ (z / size).floor() * 19349663)
+          .nextDouble();
+
+  /// Ground, trees and buildings in a square around ([cx], [cz]), replacing
+  /// the last. With [terrain] it is a real place, styled for its latitude;
+  /// [cover] says where the forests, fields, towns and water are.
+  void _buildGround(
+      double cx, double cz, HeightGrid? terrain, LandCover? cover) {
+    final path = _path!;
+    final road = path.near(cx, cz, _groundHalf + 150);
+    final style = terrain == null
+        ? RegionStyle.temperate
+        : RegionStyle(path.origin.latitude);
+    final areas = _local(cover?.areas ?? const <CoverArea>[], (a) => a.ring, cx,
+        cz, _groundHalf);
+    final houses = _local(cover?.buildings ?? const <Building>[], (b) => b.ring,
+        cx, cz, _groundHalf);
+    Cover coverHere(double x, double z) => coverAt(areas, x, z);
+    double above(double y) => y + path.baseHeight; // metres above the sea
+
     const n = _n;
     final pos = <vm.Vector3>[], col = <vm.Vector4>[];
     for (var r = 0; r < n; r++) {
@@ -340,9 +487,11 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
         final z = cz - _groundHalf + r * _groundCell;
         final g = groundAt(x, z, road, terrain: terrain);
         final shade = 0.8 + 0.2 * math.sin(x / 37) * math.cos(z / 29);
-        col.add(g.road < 4
-            ? vm.Vector4(0.18, 0.15, 0.10, 1) // verge
-            : vm.Vector4(0.07 * shade, 0.20 * shade, 0.04 * shade, 1));
+        final rgb = g.road < 4
+            ? vm.Vector3(0.18, 0.15, 0.10) // verge
+            : style.ground(coverHere(x, z), above(g.y), _patch(x, z, 90)) *
+                shade;
+        col.add(vm.Vector4(rgb.x, rgb.y, rgb.z, 1));
         pos.add(vm.Vector3(x, g.y, z));
       }
     }
@@ -373,30 +522,102 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
       }
     }
 
-    final trunks = InstancedMesh(
-        geometry:
-            CylinderGeometry(bottomRadius: 0.25, topRadius: 0.2, height: 2),
-        material: _matte(vm.Vector4(0.12, 0.07, 0.03, 1)));
-    final crowns = InstancedMesh(
-        geometry: CylinderGeometry(bottomRadius: 2.2, topRadius: 0, height: 6),
-        material: _matte(vm.Vector4(0.03, 0.12, 0.03, 1)));
-    for (final t in treesAround(cx, cz, _groundHalf, road, terrain: terrain)) {
-      vm.Matrix4 at(double y) =>
-          vm.Matrix4.translation(vm.Vector3(t.x, t.y + y * t.size, t.z))
-            ..scaleByVector3(vm.Vector3.all(t.size));
-      trunks.addInstance(at(1));
-      crowns.addInstance(at(4.5));
+    final trees = _Trees();
+    final found = treesAround(cx, cz, _groundHalf, road, terrain: terrain,
+        chance: (x, z) {
+      final y = above(terrain?.at(x, z) ?? 0);
+      final density = cover == null ? 0.09 : _treeDensity(coverHere(x, z));
+      if (density == 0) return 0;
+      if (houses.containing(x, z).isNotEmpty) return 0; // not indoors
+      return density * style.treeChance(y);
+    });
+    for (final t in found) {
+      final kind = cover != null && coverHere(t.x, t.z) == Cover.scrub
+          ? TreeKind.bush
+          : style.tree(above(t.y), t.r);
+      trees.add(kind, t.x, t.y, t.z, t.size, t.r);
     }
 
     final ground = _group([
       ...tiles,
-      Node()..addComponent(InstancedMeshComponent(trunks)),
-      Node()..addComponent(InstancedMeshComponent(crowns)),
+      ...trees.nodes(),
+      ..._buildings(houses, road, terrain, style, cx, cz),
     ]);
     if (_ground case final old?) _scene.remove(old);
     _scene.add(_ground = ground);
     _showRoadNear(cx, cz);
   }
+
+  /// The [houses] as walls and roofs, one mesh per ~300 m square (as the
+  /// ground's tiles). Ones the road would run through (OSM and the route
+  /// line disagreeing by a few metres) are left out.
+  ///
+  /// shortcut: flat roofs fanned from the middle (a courtyard building gets
+  /// a lid), and only the [_maxBuildings] nearest ([cx], [cz]). Revisit for
+  /// cities if riders want skylines.
+  List<Node> _buildings(LocalShapes<Building> houses, List<vm.Vector3> road,
+      HeightGrid? terrain, RegionStyle style, double cx, double cz) {
+    final order = [for (var i = 0; i < houses.items.length; i++) i];
+    if (order.length > _maxBuildings) {
+      double d(int i) =>
+          (houses.xs[i].first - cx).abs() + (houses.zs[i].first - cz).abs();
+      order.sort((a, b) => d(a).compareTo(d(b)));
+      order.length = _maxBuildings;
+    }
+    const piece = _tile * _groundCell;
+    final builders = <(int, int), GeometryBuilder>{};
+    for (final i in order) {
+      final xs = houses.xs[i], zs = houses.zs[i];
+      final m = xs.length - 1; // the ring repeats its first point
+      if (m < 3) continue;
+      var base = double.infinity;
+      var clear = true;
+      for (var k = 0; k < m; k++) {
+        final g = groundAt(xs[k], zs[k], road, terrain: terrain);
+        if (g.road < _halfRoad + 1) clear = false;
+        base = math.min(base, g.y);
+      }
+      if (!clear) continue;
+      final top = base + houses.items[i].height;
+      final look = style.building(_patch(xs[0], zs[0], 1));
+      var mx = 0.0, mz = 0.0;
+      for (var k = 0; k < m; k++) {
+        mx += xs[k] / m;
+        mz += zs[k] / m;
+      }
+      final b = builders.putIfAbsent(
+          ((mx / piece).floor(), (mz / piece).floor()),
+          () => GeometryBuilder(deduplicate: false));
+      b.color(vm.Vector4(look.wall.x, look.wall.y, look.wall.z, 1));
+      for (var k = 0; k < m; k++) {
+        final a = vm.Vector3(xs[k], base, zs[k]);
+        final c = vm.Vector3(xs[k + 1], base, zs[k + 1]);
+        final j = b.addVertex(a);
+        b
+          ..addVertex(vm.Vector3(a.x, top, a.z))
+          ..addVertex(c)
+          ..addVertex(vm.Vector3(c.x, top, c.z))
+          ..addTriangle(j, j + 1, j + 2)
+          ..addTriangle(j + 2, j + 1, j + 3);
+      }
+      b.color(vm.Vector4(look.roof.x, look.roof.y, look.roof.z, 1));
+      final hub = b.addVertex(vm.Vector3(mx, top, mz));
+      for (var k = 0; k < m; k++) {
+        final j = b.addVertex(vm.Vector3(xs[k], top, zs[k]));
+        b
+          ..addVertex(vm.Vector3(xs[k + 1], top, zs[k + 1]))
+          ..addTriangle(hub, j, j + 1);
+      }
+    }
+    return [
+      for (final b in builders.values)
+        if (b.vertexCount > 0) Node(mesh: Mesh(b.build(), _walls)),
+    ];
+  }
+
+  static const _maxBuildings = 6000;
+
+  late final _walls = _matte()..doubleSided = true; // coloured per vertex
 
   void _syncCourse(RouteProgress p) {
     final key = (p.course, p.course.elevationAt(p.meters) != null);

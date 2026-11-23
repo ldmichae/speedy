@@ -12,7 +12,8 @@ final urlOpenerProvider = Provider<Future<bool> Function(Uri)>(
 const credits = <({String name, String what, String url})>[
   (
     name: '© OpenStreetMap contributors',
-    what: 'Map tiles and the road data behind routing',
+    what: 'Map tiles, the road data behind routing, and the forests, '
+        'fields, water and buildings in the World view',
     url: 'https://www.openstreetmap.org/copyright',
   ),
   (
@@ -29,6 +30,11 @@ const credits = <({String name, String what, String url})>[
     name: 'Open-Meteo',
     what: 'Elevation lookups when terrain tiles are not available',
     url: 'https://open-meteo.com/',
+  ),
+  (
+    name: 'Overpass API',
+    what: 'OpenStreetMap land cover and buildings for the World view',
+    url: 'https://overpass-api.de/',
   ),
 ];
 
