@@ -14,6 +14,7 @@ import 'uuids.dart';
 class UniversalBleTransport implements BleTransport {
   UniversalBleTransport() {
     UniversalBle.onScanResult = (BleDevice device) {
+      if (_isZwiftRelay(device)) return;
       final String? n = device.name;
       _scan.add(BleScanResult(
         id: device.deviceId,
@@ -27,6 +28,15 @@ class UniversalBleTransport implements BleTransport {
       _values.add((v.deviceId, normalizeUuid(v.characteristicId), v.value));
     };
   }
+
+  /// The right half of a Zwift Ride (0x07) or Click v2 (0x0A): it relays its
+  /// buttons through the left half, so only the left one is worth pairing.
+  /// Zwift advertises the device type as the first byte after company 0x094A.
+  static bool _isZwiftRelay(BleDevice device) => device.manufacturerDataList
+      .any((m) =>
+          m.companyId == 0x094A &&
+          m.payload.isNotEmpty &&
+          (m.payload[0] == 0x07 || m.payload[0] == 0x0A));
 
   final _scan = StreamController<BleScanResult>.broadcast();
   final _conn = StreamController<(String, bool)>.broadcast();

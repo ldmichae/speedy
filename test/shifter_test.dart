@@ -103,14 +103,6 @@ void main() {
     press(1, 1);
     await pumpEventQueue();
     expect(s().gear, TrainerState.neutralGear);
-    // What arrived is shown, newest first, with what it read as.
-    buttons.add(bytes([0x19, 0x08, 0x50])); // battery
-    await pumpEventQueue();
-    expect(container.read(shifterControllerProvider).packets.take(3), [
-      'buttons: 19 08 50  (not a shift message)',
-      'buttons: 37 08 01 10 01  (no shift held)',
-      'buttons: 37 08 00 10 01  (shift up held)',
-    ]);
 
     // ERG: the press moved the target 5 W, like the arrow keys.
     expect(s().targetWatts, ergTarget + 5);

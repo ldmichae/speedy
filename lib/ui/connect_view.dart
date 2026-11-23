@@ -176,19 +176,6 @@ class _ShifterSection extends ConsumerWidget {
             trailing: TextButton(
                 onPressed: c.disconnect, child: const Text('Disconnect')),
           ),
-        // What the shifters send, so a button that does nothing can be
-        // told apart from one that is not heard at all.
-        if (connected) ...[
-          Text(
-              s.packets.isEmpty
-                  ? 'Nothing received yet. Press a shift button.'
-                  : 'Last messages received:',
-              style: theme.textTheme.bodySmall),
-          for (final p in s.packets)
-            SelectableText(p,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontFamily: 'monospace')),
-        ],
         if (!connected)
           OutlinedButton.icon(
             onPressed: busy || s.scanning ? null : c.scan,
