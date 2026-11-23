@@ -95,13 +95,27 @@ class UniversalBleTransport implements BleTransport {
     String service,
     String characteristic,
     Uint8List value,
-  ) {
-    return UniversalBle.write(
-      deviceId,
-      service,
-      characteristic,
-      value,
-      withoutResponse: false,
-    );
+  ) =>
+      writeWithFallback((withoutResponse) => UniversalBle.write(
+            deviceId,
+            service,
+            characteristic,
+            value,
+            withoutResponse: withoutResponse,
+          ));
+}
+
+/// Writes with a response (so a failure is reported), or without one when
+/// the characteristic only takes that: newer Zwift Click firmware
+/// dropped write-with-response on its handshake characteristic.
+Future<void> writeWithFallback(
+    Future<void> Function(bool withoutResponse) write) async {
+  try {
+    await write(false);
+  } on UniversalBleException catch (e) {
+    if (e.code != UniversalBleErrorCode.characteristicDoesNotSupportWrite) {
+      rethrow;
+    }
+    await write(true);
   }
 }

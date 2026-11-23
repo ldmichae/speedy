@@ -348,9 +348,11 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
                       '(connect them where you connect the trainer).',
                   child: SizedBox(
                       height: 32,
-                      child: Center(
-                          child: Text('Gear $gear',
-                              style: theme.textTheme.labelLarge))),
+                      child: Row(children: [
+                        Text('Gear $gear', style: theme.textTheme.labelLarge),
+                        const SizedBox(width: 8),
+                        Expanded(child: GearBar(gear: gear)),
+                      ])),
                 )
               else
               Tooltip(
@@ -407,4 +409,57 @@ class _ChartTile extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Where [gear] sits among the virtual gears: one notch per gear, lit up to
+/// the one you are in, the neutral gear's notch taller, so the range reads
+/// at a glance mid-effort.
+class GearBar extends StatelessWidget {
+  const GearBar({super.key, required this.gear, this.height = 12});
+
+  final int gear;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label: 'Gear $gear of ${TrainerState.gearCount}',
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: CustomPaint(
+            painter: _GearBarPainter(
+                gear, scheme.primary, scheme.outlineVariant)),
+      ),
+    );
+  }
+}
+
+class _GearBarPainter extends CustomPainter {
+  _GearBarPainter(this.gear, this.on, this.off);
+  final int gear;
+  final Color on, off;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const n = TrainerState.gearCount, gap = 2.0;
+    final w = (size.width - gap * (n - 1)) / n;
+    if (w <= 0) return;
+    for (var i = 1; i <= n; i++) {
+      // Notches grow towards the hard end; the neutral one stands out.
+      final h = i == TrainerState.neutralGear
+          ? size.height
+          : size.height * (0.45 + 0.4 * i / n);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              Rect.fromLTWH((i - 1) * (w + gap), size.height - h, w, h),
+              Radius.circular(w / 3)),
+          Paint()..color = i <= gear ? on : off);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GearBarPainter old) =>
+      old.gear != gear || old.on != on || old.off != off;
 }

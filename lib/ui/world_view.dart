@@ -160,6 +160,64 @@ class _WorldLoading extends StatelessWidget {
   }
 }
 
+/// Your virtual gear beside the rider, big enough to read mid-effort, and
+/// popping each time you shift so the shift is felt on screen too. Only
+/// while a route sets the resistance: gears do nothing in ERG.
+class _GearReadout extends ConsumerWidget {
+  const _GearReadout();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final simulating = ref
+        .watch(trainerControllerProvider.select((s) => s.gradePercent != null));
+    final gear = ref.watch(trainerControllerProvider.select((s) => s.gear));
+    if (!simulating) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    // Keyed by gear: every shift starts the pop again.
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(gear),
+      tween: Tween(begin: 1, end: 0),
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      builder: (context, pop, child) => Transform.scale(
+        scale: 1 + 0.3 * pop,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Color.lerp(scheme.surface.withValues(alpha: 0.9),
+                scheme.primaryContainer, pop),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: child,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+        child: SizedBox(
+          width: 120,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text('Gear', style: Theme.of(context).textTheme.labelLarge),
+                  const Spacer(),
+                  Text('$gear',
+                      key: const Key('worldGear'),
+                      style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                          fontFeatures: [FontFeature.tabularFigures()])),
+                ]),
+            const SizedBox(height: 6),
+            GearBar(gear: gear, height: 14),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// Says scenery is still on its way while the world is already ridable.
 class _SceneryChip extends StatelessWidget {
   const _SceneryChip();
@@ -603,6 +661,16 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
                         const _WorldLoading('Getting the world ready…'))
                 : _WorldLoading(_status),
           ),
+          if (_ready && _built)
+            // To the right of the rider, who rides at the bottom middle.
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: bottom,
+              child: const Align(
+                  alignment: Alignment(0.42, 0.55), child: _GearReadout()),
+            ),
           if (_ready && _built && _sceneryLoading)
             Positioned(
               left: 0,
