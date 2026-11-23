@@ -35,6 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _page(AppPage p) => switch (p) {
         AppPage.ride => const _RidePage(),
+        AppPage.devices => const _DevicesPage(),
         AppPage.routes => const RoutesScreen(),
         AppPage.tours => const ToursScreen(),
         AppPage.compete => const CompeteScreen(),
@@ -126,6 +127,20 @@ class _RidePage extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Pairing at any time: the trainer, heart rate strap and Zwift shifters,
+/// whether or not a ride is on.
+class _DevicesPage extends StatelessWidget {
+  const _DevicesPage();
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: const ConnectView(),
+        ),
+      );
 }
 
 /// The left dock beside the page: a slim icon rail, or icons with labels.

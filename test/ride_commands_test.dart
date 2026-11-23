@@ -40,7 +40,10 @@ void main() {
     expect(target(), before + 5);
 
     c.read(rideSessionProvider.notifier).startPlan(
-        const Plan('p', [PlanBlock([PlanStep(60, 150)])]), null);
+        const Plan('p', [
+          PlanBlock([PlanStep(60, 150)])
+        ]),
+        null);
     cmd.nudgeTarget(25);
     expect(target(), 150);
     c.read(recorderProvider.notifier).discard();
@@ -70,7 +73,8 @@ void main() {
     var onTop = true;
     final keys = rideShortcuts(cmd, () => onTop);
     final space = keys[const SingleActivator(LogicalKeyboardKey.space)]!;
-    final up = keys[const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true)]!;
+    final up =
+        keys[const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true)]!;
 
     c.read(pageProvider.notifier).state = AppPage.ride;
     final before = target();
@@ -90,5 +94,56 @@ void main() {
     space();
     expect(status(), RecStatus.recording);
     c.read(recorderProvider.notifier).discard();
+  });
+
+  group('ERG or Road', () {
+    RideSession session() => c.read(rideSessionProvider.notifier);
+    bool road() => c.read(rideSessionProvider).road;
+
+    test('with no route the road is a flat free ride, ridden on gears', () {
+      session().setRoad(true);
+      expect(road(), isTrue);
+      expect(c.read(rideSessionProvider).freeRide, isTrue);
+      expect(c.read(targetLockProvider), TargetLock.simulation);
+      final before = target();
+      cmd.nudge(5); // a gear now, not watts
+      expect(target(), before);
+
+      session().setRoad(false);
+      expect(road(), isFalse);
+      expect(c.read(targetLockProvider), isNull);
+    });
+
+    test('a route switches between its climbs and ERG mid-ride', () {
+      session().startRoute(route, simulate: true);
+      expect(road(), isTrue);
+      session().setRoad(false);
+      expect(road(), isFalse);
+      expect(c.read(routeRunProvider), isNotNull); // the ride goes on
+      session().setRoad(true);
+      expect(c.read(routeRunProvider)!.simulate, isTrue);
+      c.read(recorderProvider.notifier).discard();
+    });
+
+    test('a plan holds ERG, and ends a free ride', () {
+      session().setRoad(true);
+      session().startPlan(
+          const Plan('p', [
+            PlanBlock([PlanStep(60, 150)])
+          ]),
+          null);
+      expect(road(), isFalse);
+      session().setRoad(true); // the plan owns the target
+      expect(road(), isFalse);
+      c.read(recorderProvider.notifier).discard();
+    });
+
+    test('a route with no heights stays in ERG', () {
+      session().startRoute(route.withElevation(null), simulate: true);
+      expect(road(), isFalse);
+      session().setRoad(true);
+      expect(road(), isFalse);
+      c.read(recorderProvider.notifier).discard();
+    });
   });
 }

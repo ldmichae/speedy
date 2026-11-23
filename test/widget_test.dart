@@ -19,7 +19,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('ERG target'), findsOneWidget);
+    expect(find.text('ERG'), findsOneWidget); // the ERG | Road switch
 
     await tester.tap(find.byTooltip('View and trainer'));
     await tester.pumpAndSettle();

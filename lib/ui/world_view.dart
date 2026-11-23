@@ -4,11 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_scene/scene.dart';
+import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../core/land_cover.dart';
+import '../core/prefs.dart';
 import '../core/region_style.dart';
 import '../core/route.dart';
 import '../core/terrain_cache.dart';
@@ -160,9 +162,30 @@ class _WorldLoading extends StatelessWidget {
   }
 }
 
-/// Your virtual gear beside the rider, big enough to read mid-effort, and
-/// popping each time you shift so the shift is felt on screen too. Only
-/// while a route sets the resistance: gears do nothing in ERG.
+/// Whether the World view's gear readout is full size (number and bar) or
+/// minimised to a small chip. Remembered between rides.
+final worldGearExpandedProvider =
+    NotifierProvider<WorldGearExpanded, bool>(WorldGearExpanded.new);
+
+class WorldGearExpanded extends PersistedNotifier<bool> {
+  static const _key = 'worldGearExpanded';
+
+  @override
+  bool get defaults => true;
+
+  @override
+  bool? read(SharedPreferences p) => p.getBool(_key);
+
+  @override
+  Future<void> write(SharedPreferences p, bool v) => p.setBool(_key, v);
+
+  void toggle() => put(!state);
+}
+
+/// Your virtual gear in the bottom-right corner, big enough to read
+/// mid-effort, popping each time you shift so the shift is felt on screen
+/// too. Tap it to minimise it to a chip, or to bring it back. Only while
+/// the trainer simulates a road: gears do nothing in ERG.
 class _GearReadout extends ConsumerWidget {
   const _GearReadout();
 
@@ -171,8 +194,42 @@ class _GearReadout extends ConsumerWidget {
     final simulating = ref
         .watch(trainerControllerProvider.select((s) => s.gradePercent != null));
     final gear = ref.watch(trainerControllerProvider.select((s) => s.gear));
+    final expanded = ref.watch(worldGearExpandedProvider);
     if (!simulating) return const SizedBox.shrink();
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final number = Text('$gear',
+        key: const Key('worldGear'),
+        style: TextStyle(
+            fontSize: expanded ? 34 : 22,
+            fontWeight: FontWeight.w700,
+            height: 1,
+            fontFeatures: const [FontFeature.tabularFigures()]));
+    final chevron = Icon(expanded ? Icons.expand_more : Icons.expand_less,
+        size: 18, color: scheme.onSurfaceVariant);
+    final body = expanded
+        ? SizedBox(
+            width: 132,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                Text('Gear', style: theme.textTheme.labelLarge),
+                const SizedBox(width: 2),
+                chevron,
+                const Spacer(),
+                number,
+              ]),
+              const SizedBox(height: 6),
+              GearBar(gear: gear, height: 14),
+            ]),
+          )
+        : Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.settings_outlined,
+                size: 16, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            number,
+            const SizedBox(width: 2),
+            chevron,
+          ]);
     // Keyed by gear: every shift starts the pop again.
     return TweenAnimationBuilder<double>(
       key: ValueKey(gear),
@@ -180,38 +237,28 @@ class _GearReadout extends ConsumerWidget {
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeOutCubic,
       builder: (context, pop, child) => Transform.scale(
-        scale: 1 + 0.3 * pop,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Color.lerp(scheme.surface.withValues(alpha: 0.9),
-                scheme.primaryContainer, pop),
-            borderRadius: BorderRadius.circular(16),
-          ),
+        // Grows from its corner, into the scene rather than off the edge.
+        alignment: Alignment.bottomRight,
+        scale: 1 + (expanded ? 0.3 : 0.2) * pop,
+        child: Material(
+          color: Color.lerp(scheme.surface.withValues(alpha: 0.9),
+              scheme.primaryContainer, pop),
+          borderRadius: BorderRadius.circular(expanded ? 16 : 999),
+          clipBehavior: Clip.antiAlias,
           child: child,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-        child: SizedBox(
-          width: 120,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text('Gear', style: Theme.of(context).textTheme.labelLarge),
-                  const Spacer(),
-                  Text('$gear',
-                      key: const Key('worldGear'),
-                      style: const TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w700,
-                          height: 1,
-                          fontFeatures: [FontFeature.tabularFigures()])),
-                ]),
-            const SizedBox(height: 6),
-            GearBar(gear: gear, height: 14),
-          ]),
+      child: Tooltip(
+        message: expanded ? 'Minimise the gear' : 'Show the gear bar',
+        child: InkWell(
+          key: const Key('worldGearToggle'),
+          onTap: ref.read(worldGearExpandedProvider.notifier).toggle,
+          child: Padding(
+            padding: expanded
+                ? const EdgeInsets.fromLTRB(14, 8, 14, 10)
+                : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: body,
+          ),
         ),
       ),
     );
@@ -662,14 +709,11 @@ class _WorldFocusState extends ConsumerState<WorldFocus> {
                 : _WorldLoading(_status),
           ),
           if (_ready && _built)
-            // To the right of the rider, who rides at the bottom middle.
+            // Bottom-right corner, sitting just above the climb profile.
             Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
+              right: pad,
               bottom: bottom,
-              child: const Align(
-                  alignment: Alignment(0.42, 0.55), child: _GearReadout()),
+              child: const _GearReadout(),
             ),
           if (_ready && _built && _sceneryLoading)
             Positioned(

@@ -17,6 +17,7 @@ import 'recorder_controller.dart';
 import 'recording_panel.dart';
 import 'trainer_controller.dart';
 import 'ride_commands.dart';
+import 'connect_view.dart' show disconnectTrainer;
 import 'world_view.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
@@ -47,28 +48,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     super.dispose();
   }
 
-  /// Disconnecting mid-ride pauses the recording, so it asks first.
-  Future<void> _disconnect() async {
-    if (ref.read(recorderProvider).status != RecStatus.idle) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Disconnect the trainer?'),
-          content: const Text('Your recording pauses. You can reconnect and resume it.'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Keep riding')),
-            FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Disconnect')),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
-    await ref.read(trainerControllerProvider.notifier).disconnect();
-  }
 
   /// Dashboard, Map or Chart, always visible: it is the main mode switch.
   Widget _viewSwitch(RideView view) => SegmentedButton<RideView>(
@@ -109,7 +88,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           if (v == 'edit') {
             setState(() => _editing = true);
           } else {
-            _disconnect();
+            disconnectTrainer(context, ref);
           }
         },
         itemBuilder: (context) => [

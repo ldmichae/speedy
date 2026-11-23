@@ -32,12 +32,23 @@ class RouteRun {
   final bool simulate;
 }
 
-/// The Plan and the Route being ridden, if any.
+/// The Plan and the Route being ridden, if any, and whether the rider is on
+/// a free ride: a flat simulated road with no route, for riding on gears.
 class RideSessionState {
-  const RideSessionState({this.plan, this.route});
+  const RideSessionState({this.plan, this.route, this.freeRide = false});
   final PlanRun? plan;
   final RouteRun? route;
+  final bool freeRide;
+
+  /// The trainer simulates a road (a route's grade, or flat on a free ride)
+  /// rather than holding an ERG target.
+  bool get road => freeRide || (route?.simulate ?? false);
 }
+
+/// Whether [course] has the heights to ride as a road: a tour rides flat
+/// until a stage's elevation loads, a single route needs its own.
+bool canSimulate(RideCourse course) =>
+    course.stageCount > 1 || course.elevationAt(0) != null;
 
 /// What a plan does on one recorder update: its next state (null once it
 /// has ended; the ride goes on at the last target) and the target to send,
@@ -121,7 +132,7 @@ enum TargetLock { plan, simulation }
 
 final targetLockProvider = Provider<TargetLock?>((ref) {
   if (ref.watch(planRunProvider) != null) return TargetLock.plan;
-  if (ref.watch(routeRunProvider.select((r) => r?.simulate ?? false))) {
+  if (ref.watch(rideSessionProvider.select((s) => s.road))) {
     return TargetLock.simulation;
   }
   return null;
@@ -148,6 +159,10 @@ class RideSession extends Notifier<RideSessionState> {
       if (prev?.status != RecStatus.recording) _applied = null; // resumed
       _syncPlan();
       _syncRoute();
+      // A trainer that reconnected came back in ERG: back on the flat road.
+      if (state.freeRide) {
+        ref.read(trainerControllerProvider.notifier).setGrade(0);
+      }
     });
     // A tour being ridden gains elevation as stages load: use the new copy.
     ref.listen(toursProvider, (_, next) {
@@ -168,6 +183,7 @@ class RideSession extends Notifier<RideSessionState> {
   /// a percent plan. A plan owns the target, so it ends any simulation.
   void startPlan(Plan plan, int? ftp) {
     endSimulation();
+    if (state.freeRide) _leaveSim();
     ref.read(recorderProvider.notifier).startOrResume();
     _applied = null;
     state = RideSessionState(
@@ -189,7 +205,8 @@ class RideSession extends Notifier<RideSessionState> {
     _syncPlan();
   }
 
-  void stopPlan() => state = RideSessionState(route: _route);
+  void stopPlan() =>
+      state = RideSessionState(route: _route, freeRide: state.freeRide);
 
   /// Starts recording (or resumes it) and puts the rider at the start of
   /// [course], or of [stage] for a tour (the ride ends with that stage; see
@@ -199,9 +216,10 @@ class RideSession extends Notifier<RideSessionState> {
       {bool simulate = false, int stage = 0, double? at}) {
     final from = at ?? course.stageStart(stage);
     stage = course.stageAt(from);
-    final sim =
-        simulate && (course.stageCount > 1 || course.elevationAt(0) != null);
+    final sim = simulate && canSimulate(course);
     if (sim) stopPlan();
+    // The route now says what the trainer does; off the free ride's flat.
+    if (state.freeRide && !sim) _leaveSim();
     ref.read(recorderProvider.notifier).startOrResume();
     _doneUpTo = stage;
     _from = _at = from;
@@ -228,6 +246,30 @@ class RideSession extends Notifier<RideSessionState> {
             ref.read(liveRideStatsProvider).distanceMeters - c.lengthMeters,
             simulate: r.simulate));
     _syncRoute();
+  }
+
+  /// Switches between ERG, where the trainer holds the target, and the road,
+  /// where it simulates the grade: the route's, or flat with no route (a
+  /// free ride). Not while a plan sets the target, and not onto the road on
+  /// a route with no heights yet.
+  void setRoad(bool road) {
+    if (_plan != null || road == state.road) return;
+    final r = _route;
+    final trainer = ref.read(trainerControllerProvider.notifier);
+    if (!road) {
+      if (r != null) return endSimulation();
+      state = const RideSessionState();
+      return _leaveSim();
+    }
+    if (r == null) {
+      state = const RideSessionState(freeRide: true);
+      trainer.setGrade(0);
+    } else if (canSimulate(r.course)) {
+      state = RideSessionState(
+          route: RouteRun(r.course, r.origin, simulate: true));
+      // At once, even while paused (route ticks only come while recording).
+      trainer.setGrade(r.course.gradeAt(_at) ?? 0);
+    }
   }
 
   /// Back to ERG at the last target; the route and map carry on.

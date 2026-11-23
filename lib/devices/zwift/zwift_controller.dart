@@ -31,13 +31,16 @@ const _clickMsg = 0x37, _playMsg = 0x07, _rideMsg = 0x23;
         final shoulder = f[6] == 0;
         final right = f[1] == 0;
         return (up: shoulder && right, down: shoulder && !right);
-      case _rideMsg: // field 1 is a bitmap; a cleared bit is a held button
+      // Ride and Click v2: field 1 is a bitmap, a cleared bit a held button.
+      // Right-hand shift buttons (0x1000, 0x2000) are harder, left-hand ones
+      // (0x0100, 0x0200) easier; confirmed on a Click v2 (0x1000 / 0x0100).
+      case _rideMsg:
         final m = f[1];
         if (m == null) return null;
         bool held(int mask) => m & mask == 0;
         return (
-          up: held(0x0200) || held(0x2000),
-          down: held(0x0400) || held(0x4000),
+          up: held(0x1000) || held(0x2000),
+          down: held(0x0100) || held(0x0200),
         );
     }
   } on RangeError {

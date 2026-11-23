@@ -5,6 +5,8 @@ import 'package:indoor_cycling/core/dashboard_layout.dart';
 import 'package:indoor_cycling/devices/ble/ble_transport.dart';
 import 'package:indoor_cycling/ui/dashboard_tiles.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
+import 'package:indoor_cycling/ui/world_view.dart'
+    show worldGearExpandedProvider;
 
 import 'fakes/in_memory_ble_transport.dart';
 
@@ -47,5 +49,15 @@ void main() {
     await tester.pumpWidget(const MaterialApp(
         home: Center(child: SizedBox(width: 10, child: GearBar(gear: 5)))));
     expect(tester.takeException(), isNull);
+  });
+
+  test('the World gear readout starts full size and toggles to a chip', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    expect(c.read(worldGearExpandedProvider), isTrue);
+    c.read(worldGearExpandedProvider.notifier).toggle();
+    expect(c.read(worldGearExpandedProvider), isFalse);
+    c.read(worldGearExpandedProvider.notifier).toggle();
+    expect(c.read(worldGearExpandedProvider), isTrue);
   });
 }

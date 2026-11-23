@@ -7,6 +7,7 @@ import 'package:indoor_cycling/devices/ble/ble_transport.dart';
 import 'package:indoor_cycling/devices/ble/uuids.dart';
 import 'package:indoor_cycling/devices/trainer.dart';
 import 'package:indoor_cycling/devices/zwift/zwift_controller.dart';
+import 'package:indoor_cycling/ui/ride_session.dart';
 import 'package:indoor_cycling/ui/shifter_controller.dart';
 import 'package:indoor_cycling/ui/trainer_controller.dart';
 
@@ -51,10 +52,22 @@ void main() {
           (up: false, down: false));
     });
 
-    test('Ride: either side shifts, skipping nested analog fields', () {
+    test('Ride: right side harder, left side easier, skipping analog fields',
+        () {
       expect(parseZwiftShift(ride(0)), (up: false, down: false));
+      expect(parseZwiftShift(ride(0x1000)), (up: true, down: false));
       expect(parseZwiftShift(ride(0x2000)), (up: true, down: false));
-      expect(parseZwiftShift(ride(0x0400)), (up: false, down: true));
+      expect(parseZwiftShift(ride(0x0100)), (up: false, down: true));
+      expect(parseZwiftShift(ride(0x0200)), (up: false, down: true));
+      // Power-up and other buttons are not shifts.
+      expect(parseZwiftShift(ride(0x0400)), (up: false, down: false));
+    });
+
+    test('Click v2, as captured from one', () {
+      expect(parseZwiftShift(bytes([0x23, 0x08, 0xff, 0xdf, 0xff, 0xff, 0x0f])),
+          (up: true, down: false)); // harder
+      expect(parseZwiftShift(bytes([0x23, 0x08, 0xff, 0xfd, 0xff, 0xff, 0x0f])),
+          (up: false, down: true)); // easier
     });
 
     test('battery, keep-alive and truncated packets are ignored', () {
@@ -65,7 +78,8 @@ void main() {
     });
   });
 
-  test('shifters change the virtual gear only while simulating', () async {
+  test('shifters shift gears on the road, and move the target in ERG',
+      () async {
     final buttons = StreamController<Uint8List>.broadcast();
     final t = ShifterTransport(buttons.stream);
     final container = ProviderContainer(
@@ -81,14 +95,28 @@ void main() {
         TrainerStatus.connected);
     expect(t.rideOn, [zwiftRideOn]);
 
+    final ergTarget = s().targetWatts;
     void press(int plus, int minus) =>
         buttons.add(bytes([0x37, 0x08, plus, 0x10, minus]));
 
-    press(0, 1); // ERG: ignored
+    press(0, 1); // ERG: up 5 W
     press(1, 1);
     await pumpEventQueue();
     expect(s().gear, TrainerState.neutralGear);
+    // What arrived is shown, newest first, with what it read as.
+    buttons.add(bytes([0x19, 0x08, 0x50])); // battery
+    await pumpEventQueue();
+    expect(container.read(shifterControllerProvider).packets.take(3), [
+      'buttons: 19 08 50  (not a shift message)',
+      'buttons: 37 08 01 10 01  (no shift held)',
+      'buttons: 37 08 00 10 01  (shift up held)',
+    ]);
 
+    // ERG: the press moved the target 5 W, like the arrow keys.
+    expect(s().targetWatts, ergTarget + 5);
+
+    // On the road (a free ride), then at a 3% grade as a route would set.
+    container.read(rideSessionProvider.notifier).setRoad(true);
     await trainer.setGrade(3);
     expect(t.lastGrade, 3.0);
 
@@ -150,8 +178,8 @@ class ShifterTransport extends InMemoryBleTransport {
       {bool indicate = false}) async {
     if (characteristic == zwiftAsyncChar) return buttons;
     if (characteristic == zwiftSyncTxChar) return const Stream.empty();
-    return super.subscribe(deviceId, service, characteristic,
-        indicate: indicate);
+    return super
+        .subscribe(deviceId, service, characteristic, indicate: indicate);
   }
 
   @override

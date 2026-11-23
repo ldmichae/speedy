@@ -8,6 +8,7 @@ import '../core/units.dart';
 import 'format.dart';
 import 'layout.dart';
 import '../core/plan.dart';
+import 'compete_controller.dart';
 import 'metric_tile.dart';
 import 'route_tile.dart';
 import 'recorder_controller.dart';
@@ -126,8 +127,10 @@ class _PowerTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final power = ref.watch(trainerControllerProvider.select(pick));
-    final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
-    final simulating = ref.watch(trainerControllerProvider.select((s) => s.simulating));
+    final target =
+        ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
+    final simulating =
+        ref.watch(trainerControllerProvider.select((s) => s.simulating));
     final theme = Theme.of(context);
     // The whole tile takes the status colour, so it reads from across the
     // room; the delta text and arrow still say it without colour.
@@ -174,8 +177,8 @@ class _PowerTile extends ConsumerWidget {
                           style: metricNumberStyle.copyWith(color: fg)),
                       const SizedBox(width: 6),
                       Text('W',
-                          style: theme.textTheme.titleMedium
-                              ?.copyWith(color: fg)),
+                          style:
+                              theme.textTheme.titleMedium?.copyWith(color: fg)),
                     ],
                   ),
                 ),
@@ -285,28 +288,36 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
 
   @override
   Widget build(BuildContext context) {
-    final target = ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
+    final target =
+        ref.watch(trainerControllerProvider.select((s) => s.targetWatts));
     final lock = ref.watch(targetLockProvider);
     final following = lock != null;
-    final grade = ref.watch(trainerControllerProvider.select((s) => s.gradePercent));
+    final grade =
+        ref.watch(trainerControllerProvider.select((s) => s.gradePercent));
     final gear = ref.watch(trainerControllerProvider.select((s) => s.gear));
     final c = ref.read(trainerControllerProvider.notifier);
     final theme = Theme.of(context);
 
-    final why = switch (lock) {
-      TargetLock.plan => 'The plan sets the target. Stop the plan to adjust it.',
-      TargetLock.simulation =>
-        'The route sets the resistance. Stop the route to adjust it.',
-      null => null,
-    };
+    // On the road the buttons shift gears; under a plan they rest.
     Widget button(int delta) => Tooltip(
-          message: why ??
-              (delta > 0 ? 'Raise target by $delta W' : 'Lower target by ${-delta} W'),
+          message: switch (lock) {
+            TargetLock.plan =>
+              'The plan sets the target. Stop the plan to adjust it.',
+            TargetLock.simulation =>
+              delta > 0 ? 'Shift harder' : 'Shift easier',
+            null => delta > 0
+                ? 'Raise target by $delta W'
+                : 'Lower target by ${-delta} W',
+          },
           child: IconButton.filledTonal(
             style: IconButton.styleFrom(
                 minimumSize: Size.square(isTouchUi(context) ? 56 : 40)),
             icon: Icon(delta > 0 ? Icons.add : Icons.remove),
-            onPressed: following ? null : () => c.adjustTarget(delta),
+            onPressed: switch (lock) {
+              TargetLock.plan => null,
+              TargetLock.simulation => () => c.shift(delta.sign),
+              null => () => c.adjustTarget(delta),
+            },
           ),
         );
 
@@ -317,24 +328,21 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
         child: Row(children: [
           button(-_step),
           Expanded(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Tooltip(
-                message: 'ERG mode: the trainer holds this power whatever your '
-                    'cadence.\nArrow up/down: ±5 W. Shift + arrow: ±25 W.',
-                child: Text(
-                    switch (lock) {
-                      TargetLock.plan => 'Target set by plan',
-                      TargetLock.simulation => 'Grade set by route',
-                      null => 'ERG target',
-                    },
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (lock == TargetLock.plan)
+                Text('Target set by plan',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium),
-              ),
+                    style: theme.textTheme.bodyMedium)
+              else
+                const _ModeSwitch(),
               Flexible(
                 child: FittedBox(
                   child: Text(
-                      grade != null ? '${grade.toStringAsFixed(1)}%' : '$target W',
+                      grade != null
+                          ? '${grade.toStringAsFixed(1)}%'
+                          : '$target W',
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w700,
@@ -355,21 +363,21 @@ class _ErgTileState extends ConsumerState<_ErgTile> {
                       ])),
                 )
               else
-              Tooltip(
-                message: 'Change the step size',
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(48, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                Tooltip(
+                  message: 'Change the step size',
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: following
+                        ? null
+                        : () => setState(() => _step = _steps[
+                            (_steps.indexOf(_step) + 1) % _steps.length]),
+                    child: Text('±$_step W'),
                   ),
-                  onPressed: following
-                      ? null
-                      : () => setState(() =>
-                          _step = _steps[(_steps.indexOf(_step) + 1) % _steps.length]),
-                  child: Text('±$_step W'),
                 ),
-              ),
             ]),
           ),
           button(_step),
@@ -429,8 +437,8 @@ class GearBar extends StatelessWidget {
         height: height,
         width: double.infinity,
         child: CustomPaint(
-            painter: _GearBarPainter(
-                gear, scheme.primary, scheme.outlineVariant)),
+            painter:
+                _GearBarPainter(gear, scheme.primary, scheme.outlineVariant)),
       ),
     );
   }
@@ -462,4 +470,51 @@ class _GearBarPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GearBarPainter old) =>
       old.gear != gear || old.on != on || old.off != off;
+}
+
+/// ERG or Road: whether the trainer holds the target power, or simulates a
+/// road (the route's climbs, or flat with no route) that you ride on gears.
+class _ModeSwitch extends ConsumerWidget {
+  const _ModeSwitch();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final road = ref.watch(rideSessionProvider.select((s) => s.road));
+    final route = ref.watch(routeRunProvider)?.course;
+    final racing = ref.watch(competeProvider.select((r) => r != null));
+    final canRoad = route == null || canSimulate(route);
+    return Tooltip(
+      message: racing
+          ? 'A race is ridden on the road.'
+          : !canRoad
+              ? 'This route has no elevation yet, so it rides in ERG.'
+              : 'ERG: the trainer holds your target power.\n'
+                  'Road: it simulates ${route == null ? 'a flat road' : 'the '
+                      'route\'s climbs'}; shift with the arrow keys or Zwift '
+                  'shifters.',
+      // No taller than the label it replaced, shrinking on a small tile.
+      child: SizedBox(
+        height: 24,
+        child: FittedBox(
+          child: SegmentedButton<bool>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            segments: [
+              const ButtonSegment(value: false, label: Text('ERG')),
+              ButtonSegment(
+                  value: true, label: const Text('Road'), enabled: canRoad),
+            ],
+            selected: {road},
+            onSelectionChanged: racing
+                ? null
+                : (s) =>
+                    ref.read(rideSessionProvider.notifier).setRoad(s.first),
+          ),
+        ),
+      ),
+    );
+  }
 }

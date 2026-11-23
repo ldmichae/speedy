@@ -7,6 +7,7 @@ import '../core/prefs.dart';
 /// The places the left dock leads to.
 enum AppPage {
   ride('Ride', Icons.directions_bike_outlined, Icons.directions_bike),
+  devices('Devices', Icons.bluetooth, Icons.bluetooth_connected),
   routes('Routes', Icons.map_outlined, Icons.map),
   tours('Tours', Icons.hiking, Icons.hiking),
   compete('Compete', Icons.emoji_events_outlined, Icons.emoji_events),

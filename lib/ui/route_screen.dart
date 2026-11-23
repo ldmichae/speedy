@@ -98,31 +98,23 @@ class RoutesScreen extends ConsumerWidget {
                           onPressed: () =>
                               ref.read(routesProvider.notifier).delete(r),
                         ),
-                        if (r.elevation != null)
-                          IconButton.filledTonal(
-                            tooltip: connected
-                                ? 'Ride with simulated climbs: the trainer '
-                                    'follows the road grade'
-                                : 'Connect a trainer to ride',
-                            icon: const Icon(Icons.terrain),
-                            onPressed: connected
-                                ? () {
-                                    ref
-                                        .read(rideSessionProvider.notifier)
-                                        .startRoute(r, simulate: true);
-                                    ref.read(pageProvider.notifier).state =
-                                        AppPage.ride;
-                                  }
-                                : null,
-                          ),
                         IconButton.filled(
-                          tooltip: connected
-                              ? 'Ride this route in ERG (starts recording)'
-                              : 'Connect a trainer to ride',
+                          tooltip: !connected
+                              ? 'Connect a trainer to ride'
+                              : r.elevation != null
+                                  ? 'Ride this route on the road: the trainer '
+                                      'follows its climbs (starts recording)'
+                                  : 'Ride this route in ERG; it has no '
+                                      'elevation for the road (starts '
+                                      'recording)',
                           icon: const Icon(Icons.play_arrow),
                           onPressed: connected
                               ? () {
-                                  ref.read(rideSessionProvider.notifier).startRoute(r);
+                                  // On the road where it can be; ERG or Road
+                                  // can be switched on the ride screen.
+                                  ref
+                                      .read(rideSessionProvider.notifier)
+                                      .startRoute(r, simulate: true);
                                   ref.read(pageProvider.notifier).state =
                                       AppPage.ride;
                                 }

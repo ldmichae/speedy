@@ -4,9 +4,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../devices/trainer.dart';
 import 'heart_rate_controller.dart';
+import 'recorder_controller.dart';
+import '../core/ride_recording.dart';
 import 'shifter_controller.dart';
 import 'trainer_controller.dart';
 
+/// Disconnects the trainer; mid-ride that pauses the recording, so it asks
+/// first.
+Future<void> disconnectTrainer(BuildContext context, WidgetRef ref) async {
+  if (ref.read(recorderProvider).status != RecStatus.idle) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Disconnect the trainer?'),
+        content: const Text(
+            'Your recording pauses. You can reconnect and resume it.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep riding')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Disconnect')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+  }
+  await ref.read(trainerControllerProvider.notifier).disconnect();
+}
+
+/// The trainer, heart rate strap and Zwift shifters: on the ride page until
+/// a trainer connects, and on the Devices page at any time.
 class ConnectView extends ConsumerWidget {
   const ConnectView({super.key});
 
@@ -16,6 +45,33 @@ class ConnectView extends ConsumerWidget {
     final c = ref.read(trainerControllerProvider.notifier);
     final busy = s.status == TrainerStatus.connecting;
     final theme = Theme.of(context);
+
+    if (s.status == TrainerStatus.connected) {
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text('Devices', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 16),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.pedal_bike),
+            title: Text(s.deviceName ?? 'Trainer'),
+            subtitle: const Text('Connected'),
+            trailing: TextButton(
+                onPressed: () => disconnectTrainer(context, ref),
+                child: const Text('Disconnect')),
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 16),
+          const _HeartRateSection(),
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 16),
+          const _ShifterSection(),
+        ],
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -119,8 +175,21 @@ class _ShifterSection extends ConsumerWidget {
             subtitle: const Text('Connected'),
             trailing: TextButton(
                 onPressed: c.disconnect, child: const Text('Disconnect')),
-          )
-        else
+          ),
+        // What the shifters send, so a button that does nothing can be
+        // told apart from one that is not heard at all.
+        if (connected) ...[
+          Text(
+              s.packets.isEmpty
+                  ? 'Nothing received yet. Press a shift button.'
+                  : 'Last messages received:',
+              style: theme.textTheme.bodySmall),
+          for (final p in s.packets)
+            SelectableText(p,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontFamily: 'monospace')),
+        ],
+        if (!connected)
           OutlinedButton.icon(
             onPressed: busy || s.scanning ? null : c.scan,
             icon: const Icon(Icons.settings_input_component),

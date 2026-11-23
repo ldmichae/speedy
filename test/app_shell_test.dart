@@ -137,4 +137,15 @@ await t.sendKeyEvent(LogicalKeyboardKey.space); // not while on History    expec
     container.read(rideSessionProvider.notifier).stopPlan();
     container.read(recorderProvider.notifier).discard();
   });
+
+  testWidgets('devices can be paired from the dock mid-ride', (t) async {
+    await open(t, const Size(1300, 800), connected: true);
+    await t.tap(find.text('Devices'));
+    await t.pumpAndSettle();
+    expect(find.text('Test trainer'), findsOneWidget);
+    expect(find.text('Connected'), findsOneWidget);
+    expect(find.text('Disconnect'), findsOneWidget);
+    expect(find.text('Find heart rate monitor'), findsOneWidget);
+    expect(find.text('Find Zwift shifters'), findsOneWidget);
+  });
 }

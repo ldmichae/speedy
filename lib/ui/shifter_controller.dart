@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../devices/ble/ble_transport.dart';
@@ -21,6 +21,7 @@ class ShifterState {
     this.scanning = false,
     this.scanResults = const [],
     this.error,
+    this.packets = const [],
   });
 
   final TrainerStatus status;
@@ -29,12 +30,17 @@ class ShifterState {
   final List<BleScanResult> scanResults;
   final String? error;
 
+  /// The last few messages from the shifters, newest first, as hex with
+  /// what was made of them: for telling why a button does nothing.
+  final List<String> packets;
+
   ShifterState copyWith({
     TrainerStatus? status,
     String? deviceName,
     bool? scanning,
     List<BleScanResult>? scanResults,
     String? Function()? error,
+    List<String>? packets,
   }) =>
       ShifterState(
         status: status ?? this.status,
@@ -42,11 +48,16 @@ class ShifterState {
         scanning: scanning ?? this.scanning,
         scanResults: scanResults ?? this.scanResults,
         error: error == null ? this.error : error(),
+        packets: packets ?? this.packets,
       );
 }
 
-/// A Zwift Click, Play or Ride. Its shift buttons move the virtual gear
-/// (see [RideCommands.shift]), which only matters while simulating a route.
+/// [bytes] as spaced hex, e.g. `37 08 01`.
+String hexBytes(List<int> bytes) =>
+    bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+
+/// A Zwift Click, Play or Ride. Its shift buttons do what the arrow keys do
+/// (see [RideCommands.nudge]): a virtual gear on the road, 5 W in ERG.
 class ShifterController extends Notifier<ShifterState> {
   DeviceScanner? _scanner;
   String? _deviceId;
@@ -110,10 +121,10 @@ class ShifterController extends Notifier<ShifterState> {
       });
       _buttonSub = (await _transport.subscribe(id, service, zwiftAsyncChar))
           .listen(_onButtons);
-      // The handshake reply arrives here; we only need it subscribed.
+      // The handshake reply arrives here; kept only for the packet log.
       _syncSub = (await _transport.subscribe(id, service, zwiftSyncTxChar,
               indicate: true))
-          .listen((_) {});
+          .listen((b) => _log('reply', b, null));
       await _transport.write(id, service, zwiftSyncRxChar, zwiftRideOn);
       state = state.copyWith(status: TrainerStatus.connected);
     } catch (e) {
@@ -125,12 +136,31 @@ class ShifterController extends Notifier<ShifterState> {
   /// Shifts once per press: a held button repeats in later notifications.
   void _onButtons(Uint8List bytes) {
     final p = parseZwiftShift(bytes);
+    _log('buttons', bytes, p);
     if (p == null) return;
     final commands = ref.read(rideCommandsProvider);
-    if (p.up && !_up) commands.shift(1);
-    if (p.down && !_down) commands.shift(-1);
+    // Like the arrow keys: a gear on the road, 5 W in ERG.
+    if (p.up && !_up) commands.nudge(5);
+    if (p.down && !_down) commands.nudge(-5);
     _up = p.up;
     _down = p.down;
+  }
+
+  /// Keeps [bytes] in [ShifterState.packets] (and the debug log) with what
+  /// they read as: a shift, or not a shift.
+  void _log(String from, Uint8List bytes, ({bool up, bool down})? read) {
+    final meaning = from != 'buttons'
+        ? ''
+        : read == null
+            ? '  (not a shift message)'
+            : read.up
+                ? '  (shift up held)'
+                : read.down
+                    ? '  (shift down held)'
+                    : '  (no shift held)';
+    final line = '$from: ${hexBytes(bytes)}$meaning';
+    debugPrint('Zwift $line');
+    state = state.copyWith(packets: [line, ...state.packets.take(7)]);
   }
 
   Future<void> disconnect() async {

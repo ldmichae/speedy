@@ -398,18 +398,12 @@ class _StageTile extends ConsumerWidget {
           icon: const Icon(Icons.edit_outlined),
           onPressed: onEdit,
         ),
+        // On the road; ERG or Road can be switched on the ride screen.
         IconButton(
           tooltip: connected
-              ? 'Ride $from in ERG (starts recording)'
+              ? 'Ride $from on the road (starts recording)'
               : 'Connect a trainer to ride',
           icon: const Icon(Icons.play_arrow),
-          onPressed: connected ? () => onRide(false) : null,
-        ),
-        IconButton(
-          tooltip: connected
-              ? 'Ride $from with simulated climbs'
-              : 'Connect a trainer to ride',
-          icon: const Icon(Icons.terrain),
           onPressed: connected ? () => onRide(true) : null,
         ),
         if (onDelete != null)
